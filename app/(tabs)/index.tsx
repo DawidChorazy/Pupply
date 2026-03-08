@@ -10,13 +10,18 @@ export default function HomeScreen()  {
   const [error, setError] = useState('');
 
   const loginValidation = () => {
-      if (email.trim() === '' || password.trim() === '') {
+      if (email.trim() === '' && password.trim() === '') {
         setError('Email and password are required*');
+      } else if(email.trim() === '') {
+        setError('Email is required*');
+      } else if(password.trim() === '') {
+        setError('Password is required*');
       } else {
-        setError('');
+          setError('');
         console.log('Logging in with:', email, password);
         // Tutaj logika logowania lub nawigacja
       }
+      
   }
 
   return (
