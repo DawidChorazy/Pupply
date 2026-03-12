@@ -67,7 +67,9 @@ export default function HomeScreen()  {
               <Text style={styles.loginButtonText}>Zaloguj się</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.registerLink}>
+            <TouchableOpacity 
+            style={styles.registerLink}
+            onPress={() => router.push("../registerSteps")}>
               <Text style={styles.registerText}>Nie masz konta? Zarejestruj się</Text>
             </TouchableOpacity>
 
