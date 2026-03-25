@@ -1,78 +1,76 @@
-import { useRef } from "react";
-import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import PagerView from "react-native-pager-view";
+import { useState } from "react";
+import { Dimensions, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 const { height } = Dimensions.get("window");
 
 export default function RegisterSteps() {
 
-  const pagerRef  = useRef<PagerView>(null);
-  const currentPageRef = useRef(0);
+  const[form, setForm] = useState({
+    fullName: '',
+    email: '',
+    phonePrefix: '+48',
+    phone: '',
+    birthDate: '',
+    password: '',
+    confirmPassword: '',
+  });
 
-  const goPrev = () => {
-    const prev = Math.max(0, currentPageRef.current - 1);
-    pagerRef.current?.setPage(prev);
-    currentPageRef.current = prev;
+  const handleChange = (key: string, value: string) => {
+    setForm(prev => ({...prev, [key]: value}));
+  }
+
+  const validatePassword = (password: string) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{7,}$/;
+    return regex.test(password);
   };
 
-  const goNext = () => {
-    const next = Math.min(2, currentPageRef.current + 1);
-    pagerRef.current?.setPage(next);
-    currentPageRef.current = next;
-  };
 
   return (
-    <View style={{ flex: 1 }}>
-      <PagerView 
-      ref={pagerRef}
-      style={{ flex: 1}} 
-      initialPage={0}
-      onPageSelected={(e) => { currentPageRef.current = e.nativeEvent.position }}
-      >
-
-        <View style={styles.page} key="1">
+        <View style={styles.page}>
           <View style={styles.innerPage}>
-              <Text style={styles.title}>Jestem Kliniką</Text>
+              <Text style={styles.title}>Create account</Text>
+                <View style={styles.userTypeBackground}>
+                  <TouchableOpacity>
+                    text
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.placeholderTexts}>Imię i nazwisko</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Wpisz imię i nazwisko"
+                    value={form.fullName}
+                    onChangeText={text => handleChange('firstName', text)}>
+                  </TextInput>
+                  <Text style={styles.placeholderTexts}>Adres email</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Wpisz email"
+                    value={form.email}
+                    onChangeText={text => handleChange('email', text)}>
+                  </TextInput>
+                  <Text style={styles.placeholderTexts}>Numer telefonu</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Wpisz numer telefonu"
+                    value={form.phone}
+                    onChangeText={text => handleChange('phone', text)}>
+                  </TextInput>
+                  <Text style={styles.placeholderTexts}>Hasło</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Utwórz hasło"
+                    value={form.password}
+                    onChangeText={text => handleChange('password', text)}>
+                  </TextInput>
+                  <Text style={styles.placeholderTexts}>Potwierdź hasło</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Potwierdź hasło"
+                    value={form.confirmPassword}
+                    onChangeText={text => handleChange('confirmPassword', text)}>
+                  </TextInput>
           </View>
-
-          <TouchableOpacity style={[styles.arrow, {right: 10}]} onPress={goNext}>
-            <Text style={styles.arrowText}>▶</Text>
-          </TouchableOpacity>
-
         </View>
-
-        <View style={styles.page} key="2">
-
-          <TouchableOpacity style={[styles.arrow, {left: 10}]} onPress={goPrev}>
-            <Text style={styles.arrowText}>◀</Text>
-          </TouchableOpacity>
-                
-          <View style={styles.innerPage}>
-            <Text style={styles.title}>Jestem Zleceniodawcą</Text>   
-          </View>
-
-          <TouchableOpacity style={[styles.arrow, {right: 10}]} onPress={goNext}>
-            <Text style={styles.arrowText}>▶</Text>
-          </TouchableOpacity>
-
-        </View>
-
-        <View style={styles.page} key="3">
-          <View style={styles.innerPage}>
-              <Text style={styles.title}>Jestem zleceniobiorcą</Text>
-          </View>
-
-          <TouchableOpacity style={[styles.arrow, {left: 10}]} onPress={goPrev}>
-            <Text style={styles.arrowText}>◀</Text>
-          </TouchableOpacity>
-
-        </View>
-
-      </PagerView>
-
-      
-
-    </View>
   );
 }
 
@@ -81,7 +79,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#7B6457"
+    backgroundColor: "#FFF8F0"
   },
   pager:{
     flex: 1,
@@ -89,34 +87,48 @@ const styles = StyleSheet.create({
   },
   innerPage: {
     height: (height/6) * 5,
-    width: "85%",
-    backgroundColor: "white",
+    width: "95%",
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
-    borderRadius: 20,
-    marginTop: 20,
+    borderRadius: 60,
+    marginTop: 60,
     shadowColor: '#000',
     shadowRadius: 10,
     shadowOpacity: 0.2,
-    overflow: "hidden",
+    shadowOffset: {width: 2, height: -10},
+    elevation: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "bold",
     justifyContent: "flex-start",
     marginTop: 40,
+    marginBottom: 40,
+    color:"#7B6457"
   },
-  arrow:{
-    position: "absolute",
-    top: ((height/6) * 5) / 2,
-    transform: [{translateY: -15}],
-    zIndex: 10,
-    backgroundColor: "rgba(0,0,0,0.2)",
-    padding: 10,
-    borderRadius: 30,
-    marginTop: 20,
+  input:{
+    width: "80%",
+    height: 45,
+    backgroundColor: "white",
+    borderColor: '#D9A848',
+    borderRadius: 50,
+    borderWidth: 2,
+    paddingHorizontal: 10,
+    marginBottom: 15,
   },
-  arrowText:{
-    fontSize: 40,
-    color: "white",
+  placeholderTexts:{
+    marginLeft: 50,
+    marginBottom: 6,
+    alignSelf: 'flex-start',
+    color: '#7B6457'
+  },
+  userTypeBackground:{
+    height: '8%',
+    width:'50%',
+    backgroundColor:'#FFF8F0',
+    borderColor:'#D9A848',
+    borderRadius:50,
+    borderWidth: 1,
+    marginBottom: 15,
   }
 });
