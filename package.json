@@ -8,7 +8,14 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:build": "npm --prefix backend run build",
+    "backend:prisma:generate": "npm --prefix backend run prisma:generate",
+    "backend:prisma:migrate": "npm --prefix backend run prisma:migrate",
+    "backend:prisma:studio": "npm --prefix backend run prisma:studio",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -22,6 +29,7 @@
     "expo-image": "~3.0.11",
     "expo-linking": "~8.0.11",
     "expo-router": "~6.0.23",
+    "expo-secure-store": "^55.0.12",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",

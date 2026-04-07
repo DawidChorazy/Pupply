@@ -1,9 +1,13 @@
+import { API_BASE_URL } from "@/constants/api";
+import { ApiError } from "@/services/api-client";
+import { registerClinic, registerUser } from "@/services/auth-service";
+import { saveAuthTokens } from "@/services/auth-storage";
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Dimensions, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-
-const { height } = Dimensions.get("window");
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 export default function RegisterSteps() {
+  const router = useRouter();
 
   const[form, setForm] = useState({
     fullName: '',
@@ -17,6 +21,10 @@ export default function RegisterSteps() {
     nip: '',
   });
 
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleChange = (key: string, value: string) => {
     setForm(prev => ({...prev, [key]: value}));
   }
@@ -27,6 +35,86 @@ export default function RegisterSteps() {
   };
 
   const [registrationType, setRegistrationType] = useState<'user' | 'clinic'>('user');
+
+  const handleSubmit = async () => {
+    setError('');
+    setSuccess('');
+
+    const normalizedPhone = form.phone.startsWith('+')
+      ? form.phone.trim()
+      : `${form.phonePrefix}${form.phone.trim()}`;
+
+    if (!form.email.trim() || !form.phone.trim() || !form.password.trim() || !form.confirmPassword.trim()) {
+      setError('Uzupełnij wszystkie wymagane pola*');
+      return;
+    }
+
+    if (!validatePassword(form.password)) {
+      setError('Hasło musi mieć min. 8 znaków, małą i wielką literę oraz znak specjalny*');
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      setError('Hasła nie są takie same*');
+      return;
+    }
+
+    if (registrationType === 'user' && !form.fullName.trim()) {
+      setError('Imię i nazwisko jest wymagane*');
+      return;
+    }
+
+    if (registrationType === 'clinic') {
+      if (!form.clinicName.trim()) {
+        setError('Nazwa kliniki jest wymagana*');
+        return;
+      }
+
+      if (!/^\d{10}$/.test(form.nip.trim())) {
+        setError('NIP musi zawierać dokładnie 10 cyfr*');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const email = form.email.trim().toLowerCase();
+      const password = form.password;
+      const confirmPassword = form.confirmPassword;
+
+      const response = registrationType === 'user'
+        ? await registerUser({
+            fullName: form.fullName.trim(),
+            email,
+            phone: normalizedPhone,
+            birthDate: form.birthDate.trim() || undefined,
+            password,
+            confirmPassword
+          })
+        : await registerClinic({
+            clinicName: form.clinicName.trim(),
+            nip: form.nip.trim(),
+            email,
+            phone: normalizedPhone,
+            password,
+            confirmPassword
+          });
+
+      await saveAuthTokens(response.accessToken, response.refreshToken);
+      setSuccess('Konto utworzone, trwa logowanie...');
+      router.replace('/(tabs)/home');
+    } catch (requestError) {
+      if (requestError instanceof ApiError) {
+        setError(requestError.message || 'Rejestracja nie powiodła się*');
+      } else {
+        const errorDetails = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : '';
+        setError(`Brak połączenia z API${errorDetails}. URL: ${API_BASE_URL}`);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
 
   return (
@@ -69,6 +157,13 @@ export default function RegisterSteps() {
                     value={form.fullName}
                     onChangeText={text => handleChange('fullName', text)}>
                   </TextInput> 
+                  <Text style={styles.placeholderTexts}>Data urodzenia (opcjonalnie)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="RRRR-MM-DD"
+                    value={form.birthDate}
+                    onChangeText={text => handleChange('birthDate', text)}>
+                  </TextInput>
                   </>) : (
                     <>
                     <Text style={styles.placeholderTexts}>Nazwa kliniki</Text>
@@ -83,6 +178,7 @@ export default function RegisterSteps() {
                         style={styles.input}
                         placeholder="Wpisz NIP"
                         value={form.nip}
+                        keyboardType="number-pad"
                         onChangeText={text => handleChange('nip', text)}>
                       </TextInput> 
                     </>
@@ -92,6 +188,8 @@ export default function RegisterSteps() {
                     style={styles.input}
                     placeholder="Wpisz email"
                     value={form.email}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
                     onChangeText={text => handleChange('email', text)}>
                   </TextInput>
                   <Text style={styles.placeholderTexts}>Numer telefonu</Text>
@@ -99,6 +197,7 @@ export default function RegisterSteps() {
                     style={styles.input}
                     placeholder="Wpisz numer telefonu"
                     value={form.phone}
+                    keyboardType="phone-pad"
                     onChangeText={text => handleChange('phone', text)}>
                   </TextInput>
                   <Text style={styles.placeholderTexts}>Hasło</Text>
@@ -106,6 +205,7 @@ export default function RegisterSteps() {
                     style={styles.input}
                     placeholder="Utwórz hasło"
                     value={form.password}
+                    secureTextEntry
                     onChangeText={text => handleChange('password', text)}>
                   </TextInput>
                   <Text style={styles.placeholderTexts}>Potwierdź hasło</Text>
@@ -113,8 +213,18 @@ export default function RegisterSteps() {
                     style={styles.input}
                     placeholder="Potwierdź hasło"
                     value={form.confirmPassword}
+                    secureTextEntry
                     onChangeText={text => handleChange('confirmPassword', text)}>
                   </TextInput>
+                  {error ? <Text style={[styles.statusText, styles.statusTextError]}>{error}</Text> : null}
+                  {success ? <Text style={[styles.statusText, styles.statusTextSuccess]}>{success}</Text> : null}
+                  <TouchableOpacity
+                    style={[styles.submitButton, isSubmitting ? styles.submitButtonDisabled : null]}
+                    disabled={isSubmitting}
+                    onPress={handleSubmit}
+                  >
+                    {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitButtonText}>Utwórz konto</Text>}
+                  </TouchableOpacity>
                   </ScrollView>
           </View>
         </View>
@@ -191,6 +301,35 @@ const styles = StyleSheet.create({
   userTypeText: {
     borderRadius: 50,
     color: '#7B6457',
+    fontWeight: 'bold'
+  },
+  statusText: {
+    width: '80%',
+    textAlign: 'center',
+    marginBottom: 10,
+    fontWeight: '600'
+  },
+  statusTextError: {
+    color: '#B42318'
+  },
+  statusTextSuccess: {
+    color: '#067647'
+  },
+  submitButton: {
+    width: '80%',
+    backgroundColor: '#C75B11',
+    borderRadius: 50,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 10
+  },
+  submitButtonDisabled: {
+    opacity: 0.7
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: 'bold'
   }
 });

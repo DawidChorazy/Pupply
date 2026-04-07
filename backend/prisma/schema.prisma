@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountRole {
+  USER
+  CLINIC
+}
+
+model Account {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  role          AccountRole
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  userProfile   UserProfile?
+  clinicProfile ClinicProfile?
+  refreshTokens RefreshToken[]
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  accountId String   @unique
+  fullName  String
+  phone     String
+  birthDate DateTime?
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model ClinicProfile {
+  id        String  @id @default(cuid())
+  accountId String  @unique
+  clinicName String
+  nip       String  @unique
+  phone     String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id        String   @id
+  accountId String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}

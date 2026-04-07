@@ -1,7 +1,11 @@
 import { Fonts } from '@/constants/theme';
+import { ApiError } from '@/services/api-client';
+import { loginUser } from '@/services/auth-service';
+import { saveAuthTokens } from '@/services/auth-storage';
+import { API_BASE_URL } from '@/constants/api';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Dimensions, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get("window");
@@ -9,10 +13,11 @@ const { height } = Dimensions.get("window");
 export default function HomeScreen()  {
   const router = useRouter();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState(''); // Dodano stan dla hasła
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const loginValidation = () => {
+  const loginValidation = async () => {
       if (email.trim() === '' && password.trim() === '') {
         setError('Adres email i hasło są wymagane*');
       } else if(email.trim() === '') {
@@ -20,9 +25,27 @@ export default function HomeScreen()  {
       } else if(password.trim() === '') {
         setError('Hasło jest wymagane*');
       } else {
-          setError('');
-        console.log('Logging in with:', email, password);
-        // Tutaj logika logowania lub nawigacja
+        setError('');
+        setIsSubmitting(true);
+
+        try {
+          const response = await loginUser({
+            email: email.trim().toLowerCase(),
+            password
+          });
+
+          await saveAuthTokens(response.accessToken, response.refreshToken);
+          router.replace('/(tabs)/home');
+        } catch (requestError) {
+          if (requestError instanceof ApiError) {
+            setError(requestError.message || 'Logowanie nie powiodło się*');
+          } else {
+            const errorDetails = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : '';
+            setError(`Brak połączenia z API${errorDetails}. URL: ${API_BASE_URL}`);
+          }
+        } finally {
+          setIsSubmitting(false);
+        }
       }
 
   }
@@ -64,9 +87,10 @@ export default function HomeScreen()  {
               <TouchableOpacity
                 style={styles.loginButton}
                 activeOpacity={0.8}
+                disabled={isSubmitting}
                 onPress={loginValidation}
               >
-                <Text style={styles.loginButtonText}>Zaloguj się</Text>
+                {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginButtonText}>Zaloguj się</Text>}
               </TouchableOpacity>
 
               <TouchableOpacity 
