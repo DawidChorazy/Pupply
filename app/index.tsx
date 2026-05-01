@@ -1,8 +1,8 @@
+import { API_BASE_URL } from '@/constants/api';
 import { Fonts } from '@/constants/theme';
 import { ApiError } from '@/services/api-client';
 import { loginUser } from '@/services/auth-service';
 import { saveAuthTokens } from '@/services/auth-storage';
-import { API_BASE_URL } from '@/constants/api';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Dimensions, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -95,7 +95,7 @@ export default function HomeScreen()  {
 
               <TouchableOpacity 
               style={styles.registerLink}
-              onPress={() => router.push("../registerSteps")}>
+              onPress={() => router.push("../register/RegisterScreen")}>
                 <Text style={styles.registerText}>Nie masz konta? Zarejestruj się</Text>
               </TouchableOpacity>
 
