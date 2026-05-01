@@ -88,8 +88,8 @@ export default function HomeScreen()  {
                 style={styles.loginButton}
                 activeOpacity={0.8}
                 disabled={isSubmitting}
-                onPress={loginValidation}
-              >
+                // onPress={loginValidation} <- TODO podmienione na potrzeby testowania MainScreen'a, do podmiany po stworzeniu
+                onPress={() => router.push("../mainScreen/MainScreen")}> 
                 {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginButtonText}>Zaloguj się</Text>}
               </TouchableOpacity>
 
