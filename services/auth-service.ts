@@ -1,6 +1,7 @@
 import { API_ENDPOINTS } from "@/constants/api";
 import {
   AuthResponse,
+  GoogleLoginPayload,
   LoginPayload,
   ProfileResponse,
   RefreshPayload,
@@ -12,6 +13,13 @@ import { apiRequest } from "./api-client";
 
 export function loginUser(payload: LoginPayload) {
   return apiRequest<AuthResponse>(API_ENDPOINTS.auth.login, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function loginWithGoogle(payload: GoogleLoginPayload) {
+  return apiRequest<AuthResponse>(API_ENDPOINTS.auth.google, {
     method: "POST",
     body: JSON.stringify(payload)
   });

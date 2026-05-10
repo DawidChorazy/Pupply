@@ -41,6 +41,7 @@ export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL?.trim() || resolveFa
 
 export const API_ENDPOINTS = {
   auth: {
+    google: "/auth/google",
     login: "/auth/login",
     refresh: "/auth/refresh",
     registerUser: "/auth/register/user",

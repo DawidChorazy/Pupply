@@ -110,6 +110,30 @@ export const openApiSpec = {
         }
       }
     },
+    "/api/auth/google": {
+      post: {
+        tags: ["Auth"],
+        summary: "Login with Google",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/GoogleLoginRequest" }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Authentication successful",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/AuthResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/refresh": {
       post: {
         tags: ["Auth"],
@@ -202,6 +226,13 @@ export const openApiSpec = {
         properties: {
           email: { type: "string", format: "email", example: "jan@example.com" },
           password: { type: "string", example: "Test@1234" }
+        }
+      },
+      GoogleLoginRequest: {
+        type: "object",
+        required: ["idToken"],
+        properties: {
+          idToken: { type: "string" }
         }
       },
       AuthResponse: {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  loginWithGoogle,
   login,
   refreshSession,
   registerClinic,
@@ -8,6 +9,7 @@ import {
 } from "../services/auth.service";
 import { asyncHandler } from "../utils/async-handler";
 import {
+  googleLoginSchema,
   loginSchema,
   refreshTokenSchema,
   registerClinicSchema,
@@ -45,6 +47,16 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const payload = loginSchema.parse(req.body);
     const result = await login(payload);
+
+    res.status(200).json(result);
+  })
+);
+
+authRouter.post(
+  "/google",
+  asyncHandler(async (req, res) => {
+    const payload = googleLoginSchema.parse(req.body);
+    const result = await loginWithGoogle(payload);
 
     res.status(200).json(result);
   })

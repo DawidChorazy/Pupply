@@ -1,4 +1,5 @@
 import { AccountRole } from "@prisma/client";
+import { OAuth2Client } from "google-auth-library";
 
 import { env } from "../config/env";
 import { prisma } from "../config/prisma";
@@ -33,6 +34,10 @@ export interface LoginInput {
   password: string;
 }
 
+export interface GoogleLoginInput {
+  idToken: string;
+}
+
 export interface RefreshInput {
   refreshToken: string;
 }
@@ -54,6 +59,8 @@ type AccountWithProfiles = {
     phone: string;
   } | null;
 };
+
+const googleOAuthClient = new OAuth2Client();
 
 function mapAccount(account: AccountWithProfiles) {
   return {
@@ -207,11 +214,121 @@ export async function login(input: LoginInput) {
     throw new AppError(401, "Invalid email or password", "INVALID_CREDENTIALS");
   }
 
+  if (!account.passwordHash) {
+    throw new AppError(401, "Use Google to sign in to this account", "GOOGLE_ACCOUNT");
+  }
+
   const passwordIsValid = await verifyPassword(input.password, account.passwordHash);
 
   if (!passwordIsValid) {
     throw new AppError(401, "Invalid email or password", "INVALID_CREDENTIALS");
   }
+
+  const tokens = await issueTokenPair(account.id, account.role);
+
+  return {
+    ...tokens,
+    account: mapAccount(account)
+  };
+}
+
+export async function loginWithGoogle(input: GoogleLoginInput) {
+  if (env.GOOGLE_CLIENT_IDS.length === 0) {
+    throw new AppError(500, "Google login is not configured", "GOOGLE_AUTH_NOT_CONFIGURED");
+  }
+
+  const ticket = await googleOAuthClient.verifyIdToken({
+    idToken: input.idToken,
+    audience: env.GOOGLE_CLIENT_IDS
+  }).catch(() => {
+    throw new AppError(401, "Google token is invalid", "GOOGLE_INVALID_TOKEN");
+  });
+
+  const payload = ticket.getPayload();
+  const googleId = payload?.sub;
+  const email = payload?.email?.toLowerCase();
+
+  if (!googleId || !email) {
+    throw new AppError(401, "Google account did not include required identity data", "GOOGLE_INVALID_TOKEN");
+  }
+
+  if (!payload.email_verified) {
+    throw new AppError(401, "Google email address is not verified", "GOOGLE_EMAIL_NOT_VERIFIED");
+  }
+
+  const existingGoogleAccount = await prisma.account.findUnique({
+    where: {
+      googleId
+    },
+    include: {
+      userProfile: true,
+      clinicProfile: true
+    }
+  });
+
+  if (existingGoogleAccount) {
+    const tokens = await issueTokenPair(existingGoogleAccount.id, existingGoogleAccount.role);
+
+    return {
+      ...tokens,
+      account: mapAccount(existingGoogleAccount)
+    };
+  }
+
+  const existingEmailAccount = await prisma.account.findUnique({
+    where: {
+      email
+    },
+    include: {
+      userProfile: true,
+      clinicProfile: true
+    }
+  });
+
+  if (existingEmailAccount) {
+    if (existingEmailAccount.googleId && existingEmailAccount.googleId !== googleId) {
+      throw new AppError(409, "This email is already linked to another Google account", "GOOGLE_ACCOUNT_CONFLICT");
+    }
+
+    const linkedAccount = await prisma.account.update({
+      where: {
+        id: existingEmailAccount.id
+      },
+      data: {
+        googleId
+      },
+      include: {
+        userProfile: true,
+        clinicProfile: true
+      }
+    });
+
+    const tokens = await issueTokenPair(linkedAccount.id, linkedAccount.role);
+
+    return {
+      ...tokens,
+      account: mapAccount(linkedAccount)
+    };
+  }
+
+  const account = await prisma.account.create({
+    data: {
+      email,
+      googleId,
+      passwordHash: null,
+      role: "USER",
+      userProfile: {
+        create: {
+          fullName: payload.name ?? email,
+          phone: ""
+        }
+      }
+    },
+    include: {
+      userProfile: true,
+      clinicProfile: true
+    }
+  });
 
   const tokens = await issueTokenPair(account.id, account.role);
 

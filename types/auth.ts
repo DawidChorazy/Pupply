@@ -18,6 +18,10 @@ export interface LoginPayload {
   password: string;
 }
 
+export interface GoogleLoginPayload {
+  idToken: string;
+}
+
 export interface RegisterUserPayload {
   fullName: string;
   email: string;

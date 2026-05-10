@@ -12,7 +12,16 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
-  CORS_ORIGIN: z.string().default("*")
+  CORS_ORIGIN: z.string().default("*"),
+  GOOGLE_CLIENT_IDS: z
+    .string()
+    .default("")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((clientId) => clientId.trim())
+        .filter(Boolean)
+    )
 });
 
 const parsed = envSchema.safeParse(process.env);
