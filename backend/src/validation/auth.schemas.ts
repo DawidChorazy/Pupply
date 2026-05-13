@@ -22,6 +22,17 @@ export const registerUserSchema = z
       .string()
       .trim()
       .optional()
+      .transform((value) => {
+        if (!value) return value;
+
+        const match = /^([0-9]{2})\.([0-9]{2})\.([0-9]{4})$/.exec(value);
+        if (match) {
+          const [, day, month, year] = match;
+          return `${year}-${month}-${day}`;
+        }
+
+        return value;
+      })
       .refine((value) => !value || !Number.isNaN(Date.parse(value)), {
         message: "Birth date must be a valid date string"
       }),

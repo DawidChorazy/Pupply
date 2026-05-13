@@ -1,7 +1,39 @@
+import { ApiError } from "@/services/api-client";
 import { registerClinic, registerUser } from "@/services/auth-service";
 import { saveAuthTokens } from "@/services/auth-storage";
 import { useState } from "react";
 import { validateForm } from "./validation";
+
+function normalizeBirthDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  const match = /^([0-9]{2})\.([0-9]{2})\.([0-9]{4})$/.exec(trimmed);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year}-${month}-${day}`;
+  }
+
+  return trimmed;
+}
+
+function formatApiError(error: ApiError) {
+  const payload = error.details;
+
+  if (payload && typeof payload === "object") {
+    const details = (payload as { details?: Record<string, string[]> }).details;
+    if (details) {
+      const firstKey = Object.keys(details)[0];
+      const firstMessage = firstKey ? details[firstKey]?.[0] : undefined;
+
+      if (firstMessage) {
+        return firstMessage;
+      }
+    }
+  }
+
+  return error.message || "Rejestracja nie powiodła się";
+}
 
 export function useRegisterForm() {
   const [form, setForm] = useState({
@@ -43,6 +75,7 @@ export function useRegisterForm() {
       const normalizedPhone = form.phone.startsWith("+")
         ? form.phone
         : `${form.phonePrefix}${form.phone}`;
+      const normalizedBirthDate = normalizeBirthDate(form.birthDate);
 
       const response =
         registrationType === "user"
@@ -50,7 +83,7 @@ export function useRegisterForm() {
               fullName: form.fullName.trim(),
               email: form.email.trim().toLowerCase(),
               phone: normalizedPhone,
-              birthDate: form.birthDate || undefined,
+              birthDate: normalizedBirthDate,
               password: form.password,
               confirmPassword: form.confirmPassword
             })
@@ -66,7 +99,11 @@ export function useRegisterForm() {
       await saveAuthTokens(response.accessToken, response.refreshToken);
       setSuccess("Konto utworzone");
     } catch (e) {
-      setError("Rejestracja nie powiodła się");
+      if (e instanceof ApiError) {
+        setError(formatApiError(e));
+      } else {
+        setError("Rejestracja nie powiodła się");
+      }
     } finally {
       setIsSubmitting(false);
     }
