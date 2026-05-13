@@ -1,12 +1,16 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { TouchableOpacity, View } from "react-native";
 import { styles } from "../styles";
+
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 type ActionCardProps = {
   title: string;
   description: string;
   buttonText: string;
   color: string;
+  iconName?: IconName;
 };
 
 export function ActionCard({
@@ -14,17 +18,21 @@ export function ActionCard({
   description,
   buttonText,
   color,
+  iconName = "paw",
 }: ActionCardProps) {
   return (
-    <View style={styles.card}>
-      <Text style={styles.icons}>🐾</Text>
+    <TouchableOpacity style={styles.actionCard}>
+      <View style={[styles.actionIconBox, { backgroundColor: `${color}18` }]}>
+        <MaterialCommunityIcons name={iconName} size={24} color={color} />
+      </View>
 
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={styles.cardDesc}>{description}</Text>
+      <Text style={styles.actionTitle}>{title}</Text>
+      <Text style={styles.actionDescription}>{description}</Text>
 
-      <TouchableOpacity style={[styles.button, { backgroundColor: color }]}>
-        <Text style={styles.buttonText}>{buttonText}</Text>
-      </TouchableOpacity>
-    </View>
+      <View style={styles.actionFooter}>
+        <Text style={[styles.actionText, { color }]}>{buttonText}</Text>
+        <MaterialCommunityIcons name="arrow-right" size={16} color={color} />
+      </View>
+    </TouchableOpacity>
   );
 }
