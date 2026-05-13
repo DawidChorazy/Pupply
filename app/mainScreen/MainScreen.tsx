@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { ScrollView, View } from "react-native";
 import { ActionCard } from "./components/ActionCard";
 import { DogsCard } from "./components/DogsCard";
@@ -16,7 +17,7 @@ export default function MainScreen() {
 
       <View style={styles.quickActionsRow}>
         <ActionCard
-          title="Znajdz opieke"
+          title="Znajdź opiekę"
           description="Sprawdzeni petsitterzy w okolicy"
           buttonText="Szukaj"
           color="#D35400"
@@ -24,15 +25,15 @@ export default function MainScreen() {
         />
 
         <ActionCard
-          title="Zostan opiekunem"
+          title="Zostań opiekunem"
           description="Spaceruj ze zwierzakami i zarabiaj"
-          buttonText="Dolacz"
+          buttonText="Dołącz"
           color="#1E9B5A"
           iconName="walk"
         />
       </View>
 
-      <DogsCard />
+      <DogsCard onAddDog={() => router.push("../mainScreen/AddDogScreen")} />
 
       <WalksCard />
     </ScrollView>
