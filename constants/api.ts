@@ -47,6 +47,11 @@ export const API_ENDPOINTS = {
     registerUser: "/auth/register/user",
     registerClinic: "/auth/register/clinic"
   },
+  pets: {
+    list: "/pets",
+    create: "/pets",
+    detail: (petId: string) => `/pets/${petId}`
+  },
   users: {
     me: "/users/me"
   }

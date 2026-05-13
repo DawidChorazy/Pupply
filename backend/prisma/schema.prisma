@@ -12,6 +12,11 @@ enum AccountRole {
   CLINIC
 }
 
+enum PetGender {
+  MALE
+  FEMALE
+}
+
 model Account {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -23,6 +28,7 @@ model Account {
   userProfile   UserProfile?
   clinicProfile ClinicProfile?
   refreshTokens RefreshToken[]
+  pets          Pet[]
 }
 
 model UserProfile {
@@ -51,6 +57,27 @@ model RefreshToken {
   revokedAt DateTime?
   createdAt DateTime @default(now())
   account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model Pet {
+  id        String     @id @default(cuid())
+  accountId String
+  name      String
+  age       Int?
+  breed     String?
+  weight    Float?
+  gender    PetGender
+  photoUrl  String?
+  illnesses String?
+  allergies String?
+  vaccines  String?
+  vet       String?
+  notes     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
 }
