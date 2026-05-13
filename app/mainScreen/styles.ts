@@ -196,3 +196,158 @@ export const styles = StyleSheet.create({
     fontWeight: "800"
   }
 });
+
+export const addDogStyles = StyleSheet.create({
+  keyboardView: {
+    flex: 1,
+    backgroundColor: "#FFF8F0"
+  },
+  container: {
+    flex: 1,
+    backgroundColor: "#FFF8F0"
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 36
+  },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingTop: 8,
+    paddingBottom: 22
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6B3A18",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3
+  },
+  headerCopy: {
+    flex: 1
+  },
+  eyebrow: {
+    color: "#D35400",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 4
+  },
+  title: {
+    color: "#3D2415",
+    fontSize: 28,
+    fontWeight: "800"
+  },
+  subtitle: {
+    color: "#8A6D5B",
+    fontSize: 14,
+    lineHeight: 19,
+    marginTop: 4
+  },
+
+  photoCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#F2E4D8",
+    marginBottom: 14,
+    shadowColor: "#6B3A18",
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3
+  },
+  photoPlaceholder: {
+    height: 170,
+    borderRadius: 18,
+    backgroundColor: "#FFF0D2",
+    alignItems: "center",
+    justifyContent: "center",
+
+  },
+  photoPreview: {
+    height: 190,
+    borderRadius: 18,
+    marginBottom: 12,
+    backgroundColor: "#FFF0D2"
+  },
+  photoTitle: {
+    color: "#3D2415",
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 8
+  },
+  photoSubtitle: {
+    color: "#8A6D5B",
+    fontSize: 12,
+    marginTop: 4
+  },
+
+  formCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F2E4D8",
+    marginBottom: 14,
+    shadowColor: "#6B3A18",
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3
+  },
+  sectionTitle: {
+    color: "#3D2415",
+    fontSize: 17,
+    fontWeight: "800",
+    marginBottom: 12
+  },
+  row: {
+    flexDirection: "row",
+    gap: 10
+  },
+  halfInput: {
+    flex: 1
+  },
+  input: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#FFF8F0",
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    paddingHorizontal: 14,
+    color: "#3D2415",
+    fontSize: 14,
+    marginBottom: 10
+  },
+  textArea: {
+    minHeight: 92,
+    paddingTop: 13
+  },
+
+  saveButton: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#D35400",
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  },
+  saveButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800"
+  }
+});
