@@ -167,6 +167,43 @@ export const styles = StyleSheet.create({
     lineHeight: 17,
     textAlign: "center"
   },
+  petsError: {
+    color: "#B42318",
+    fontSize: 13,
+    textAlign: "center"
+  },
+  petRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2E4D8"
+  },
+  petRowLast: {
+    borderBottomWidth: 0
+  },
+  petAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FFF0D2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10
+  },
+  petInfo: {
+    flex: 1
+  },
+  petName: {
+    color: "#3D2415",
+    fontSize: 15,
+    fontWeight: "800"
+  },
+  petMeta: {
+    color: "#8A6D5B",
+    fontSize: 12,
+    marginTop: 2
+  },
 
   walksEmptyContent: {
     minHeight: 148,
@@ -333,6 +370,66 @@ export const addDogStyles = StyleSheet.create({
     paddingTop: 13
   },
 
+  fieldLabel: {
+    color: "#6F5648",
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8
+  },
+  genderRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10
+  },
+  genderOption: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    backgroundColor: "#FFF8F0",
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  genderOptionActive: {
+    backgroundColor: "#D35400",
+    borderColor: "#D35400"
+  },
+  genderIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFF0D2",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  genderIconCircleActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)"
+  },
+  genderLabel: {
+    color: "#3D2415",
+    fontSize: 13,
+    fontWeight: "700"
+  },
+  genderLabelActive: {
+    color: "#FFFFFF"
+  },
+
+  statusTextError: {
+    color: "#B42318",
+    marginBottom: 8,
+    textAlign: "center",
+    fontSize: 13
+  },
+  statusTextSuccess: {
+    color: "#067647",
+    marginBottom: 8,
+    textAlign: "center",
+    fontSize: 13
+  },
+
   saveButton: {
     height: 52,
     borderRadius: 16,
@@ -344,6 +441,9 @@ export const addDogStyles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4
+  },
+  saveButtonDisabled: {
+    opacity: 0.7
   },
   saveButtonText: {
     color: "#FFFFFF",

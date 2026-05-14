@@ -1,10 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -12,14 +11,15 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+
 import { ApiError } from "@/services/api-client";
 import { getAccessToken } from "@/services/auth-storage";
-import { createPet } from "@/services/pets-service";
-import { PetGender } from "@/types/pets";
-import { addDogStyles as styles } from "./styles";
+import { getPet, updatePet } from "@/services/pets-service";
+import { Pet, PetGender } from "@/types/pets";
+import { addDogStyles as styles } from "../styles";
 
 type DogForm = {
-  photoUrl: string; // do zmiany będzie nie na zasadzie linku
+  photoUrl: string;
   name: string;
   age: string;
   breed: string;
@@ -33,7 +33,7 @@ type DogForm = {
 };
 
 const initialForm: DogForm = {
-  photoUrl: "", // do zmiany nie na zasadzie linku
+  photoUrl: "",
   name: "",
   age: "",
   breed: "",
@@ -70,11 +70,29 @@ const parseOptionalInt = (value: string) => {
   return Number.isInteger(parsed) ? parsed : null;
 };
 
-export default function AddDogScreen() {
+function mapPetToForm(pet: Pet): DogForm {
+  return {
+    photoUrl: pet.photoUrl ?? "",
+    name: pet.name,
+    age: pet.age !== null ? String(pet.age) : "",
+    breed: pet.breed ?? "",
+    weight: pet.weight !== null ? String(pet.weight) : "",
+    gender: pet.gender,
+    illnesses: pet.illnesses ?? "",
+    allergies: pet.allergies ?? "",
+    vaccines: pet.vaccines ?? "",
+    vet: pet.vet ?? "",
+    notes: pet.notes ?? ""
+  };
+}
+
+export default function PetDetailsScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const [form, setForm] = useState<DogForm>(initialForm);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const updateField = (field: keyof DogForm, value: string) => {
     setForm((currentForm) => ({
@@ -83,11 +101,58 @@ export default function AddDogScreen() {
     }));
   };
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPet = async () => {
+      if (!id) {
+        setError("Nie znaleziono zwierzaka");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const accessToken = await getAccessToken();
+        if (!accessToken) {
+          setError("Zaloguj się ponownie, aby zobaczyć profil");
+          setIsLoading(false);
+          return;
+        }
+
+        const response = await getPet(String(id), accessToken);
+        if (isMounted) {
+          setForm(mapPetToForm(response.pet));
+        }
+      } catch (requestError) {
+        if (requestError instanceof ApiError) {
+          setError(requestError.message || "Nie udało się pobrać profilu");
+        } else {
+          setError("Nie udało się pobrać profilu");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadPet();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
   const handleSave = async () => {
     if (isSubmitting) return;
 
     setError("");
     setSuccess("");
+
+    if (!id) {
+      setError("Nie znaleziono zwierzaka");
+      return;
+    }
 
     if (!form.name.trim()) {
       setError("Imię jest wymagane");
@@ -113,14 +178,15 @@ export default function AddDogScreen() {
 
     const accessToken = await getAccessToken();
     if (!accessToken) {
-      setError("Zaloguj się ponownie, aby dodać zwierzaka");
+      setError("Zaloguj się ponownie, aby zapisać zmiany");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      await createPet(
+      await updatePet(
+        String(id),
         {
           name: form.name.trim(),
           gender: form.gender,
@@ -137,13 +203,12 @@ export default function AddDogScreen() {
         accessToken
       );
 
-      setSuccess("Zwierzak został dodany");
-      setForm(initialForm);
+      setSuccess("Zapisano zmiany");
     } catch (requestError) {
       if (requestError instanceof ApiError) {
-        setError(requestError.message || "Nie udało się dodać zwierzaka");
+        setError(requestError.message || "Nie udało się zapisać zmian");
       } else {
-        setError("Nie udało się dodać zwierzaka");
+        setError("Nie udało się zapisać zmian");
       }
     } finally {
       setIsSubmitting(false);
@@ -167,92 +232,87 @@ export default function AddDogScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>Nowy profil</Text>
-            <Text style={styles.title}>Dodaj zwierzaka</Text>
-            <Text style={styles.subtitle}>Uzupełnij informacje, które pomogą dobrać opiekę.</Text>
+            <Text style={styles.eyebrow}>Profil</Text>
+            <Text style={styles.title}>Szczegóły zwierzaka</Text>
+            <Text style={styles.subtitle}>Zmieniaj dane i zapisz aktualizacje.</Text>
           </View>
         </View>
 
-        <View style={styles.photoCard}>
-          {form.photoUrl.trim() ? (
-            <Image source={{ uri: form.photoUrl.trim() }} style={styles.photoPreview} />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <MaterialCommunityIcons name="camera-plus-outline" size={36} color="#D35400" />
-              <Text style={styles.photoTitle}>Dodaj zdjęcie</Text>
+        {isLoading ? (
+          <View style={styles.formCard}>
+            <ActivityIndicator color="#D35400" />
+          </View>
+        ) : (
+          <View style={styles.formCard}>
+            <Text style={styles.sectionTitle}>Podstawowe dane</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Imię"
+              placeholderTextColor="#A98D7B"
+              value={form.name}
+              onChangeText={(value) => updateField("name", value)}
+            />
+
+            <View style={styles.row}>
+              <TextInput
+                style={[styles.input, styles.halfInput]}
+                placeholder="Wiek"
+                placeholderTextColor="#A98D7B"
+                value={form.age}
+                onChangeText={(value) => updateField("age", value)}
+                keyboardType="numeric"
+              />
+
+              <TextInput
+                style={[styles.input, styles.halfInput]}
+                placeholder="Waga"
+                placeholderTextColor="#A98D7B"
+                value={form.weight}
+                onChangeText={(value) => updateField("weight", value)}
+              />
             </View>
-          )}
-        </View>
-
-        <View style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Podstawowe dane</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Imię"
-            placeholderTextColor="#A98D7B"
-            value={form.name}
-            onChangeText={(value) => updateField("name", value)}
-          />
-
-          <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="Wiek"
-              placeholderTextColor="#A98D7B"
-              value={form.age}
-              onChangeText={(value) => updateField("age", value)}
-              keyboardType="numeric"
-            />
 
             <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="Waga"
+              style={styles.input}
+              placeholder="Rasa"
               placeholderTextColor="#A98D7B"
-              value={form.weight}
-              onChangeText={(value) => updateField("weight", value)}
+              value={form.breed}
+              onChangeText={(value) => updateField("breed", value)}
             />
-          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Rasa"
-            placeholderTextColor="#A98D7B"
-            value={form.breed}
-            onChangeText={(value) => updateField("breed", value)}
-          />
+            <Text style={styles.fieldLabel}>Płeć</Text>
+            <View style={styles.genderRow}>
+              {genderOptions.map((option) => {
+                const isActive = form.gender === option.value;
 
-          <Text style={styles.fieldLabel}>Płeć</Text>
-          <View style={styles.genderRow}>
-            {genderOptions.map((option) => {
-              const isActive = form.gender === option.value;
-
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[styles.genderOption, isActive && styles.genderOptionActive]}
-                  onPress={() => updateField("gender", option.value)}
-                >
-                  <View
-                    style={[
-                      styles.genderIconCircle,
-                      isActive && styles.genderIconCircleActive
-                    ]}
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.genderOption, isActive && styles.genderOptionActive]}
+                    onPress={() => updateField("gender", option.value)}
                   >
-                    <MaterialCommunityIcons
-                      name={option.icon}
-                      size={20}
-                      color={isActive ? "#FFFFFF" : "#D35400"}
-                    />
-                  </View>
-                  <Text style={[styles.genderLabel, isActive && styles.genderLabelActive]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <View
+                      style={[
+                        styles.genderIconCircle,
+                        isActive && styles.genderIconCircleActive
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={option.icon}
+                        size={20}
+                        color={isActive ? "#FFFFFF" : "#D35400"}
+                      />
+                    </View>
+                    <Text style={[styles.genderLabel, isActive && styles.genderLabelActive]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={styles.formCard}>
           <Text style={styles.sectionTitle}>Zdrowie i opieka</Text>
@@ -317,7 +377,7 @@ export default function AddDogScreen() {
           {isSubmitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.saveButtonText}>Zapisz zwierzaka</Text>
+            <Text style={styles.saveButtonText}>Zapisz zmiany</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

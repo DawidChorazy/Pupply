@@ -203,8 +203,8 @@ export default function HomeScreen()  {
                 style={styles.loginButton}
                 activeOpacity={0.8}
                 disabled={isSubmitting || isGoogleSubmitting}
-                // onPress={loginValidation} do odkomentowania jak login zadziala i usunąć linie poniżej
-                onPress={() => router.push("../mainScreen/MainScreen")}
+                onPress={loginValidation}// do odkomentowania jak login zadziala i usunąć linie poniżej
+               // onPress={() => router.push("../mainScreen/MainScreen")}
               >
                 {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginButtonText}>Zaloguj się</Text>}
               </TouchableOpacity>

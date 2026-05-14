@@ -14,7 +14,8 @@ export const openApiSpec = {
   tags: [
     { name: "Health" },
     { name: "Auth" },
-    { name: "Users" }
+    { name: "Users" },
+    { name: "Pets" }
   ],
   paths: {
     "/api/health": {
@@ -185,6 +186,117 @@ export const openApiSpec = {
           }
         }
       }
+    },
+    "/api/pets": {
+      get: {
+        tags: ["Pets"],
+        summary: "List pets",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Pets list",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/PetsResponse" }
+              }
+            }
+          }
+        }
+      },
+      post: {
+        tags: ["Pets"],
+        summary: "Create pet",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/CreatePetRequest" }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "Pet created",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    pet: { $ref: "#/components/schemas/PetResponse" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pets/{petId}": {
+      get: {
+        tags: ["Pets"],
+        summary: "Get pet",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "petId",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        responses: {
+          "200": {
+            description: "Pet",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    pet: { $ref: "#/components/schemas/PetResponse" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      patch: {
+        tags: ["Pets"],
+        summary: "Update pet",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "petId",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/UpdatePetRequest" }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Pet updated",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    pet: { $ref: "#/components/schemas/PetResponse" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   components: {
@@ -259,6 +371,72 @@ export const openApiSpec = {
           fullName: { type: "string" },
           phone: { type: "string" },
           birthDate: { type: "string", format: "date-time", nullable: true }
+        }
+      },
+      PetGender: {
+        type: "string",
+        enum: ["MALE", "FEMALE"]
+      },
+      PetsResponse: {
+        type: "object",
+        properties: {
+          pets: {
+            type: "array",
+            items: { $ref: "#/components/schemas/PetResponse" }
+          }
+        }
+      },
+      CreatePetRequest: {
+        type: "object",
+        required: ["name", "gender"],
+        properties: {
+          name: { type: "string", example: "Luna" },
+          age: { type: "integer", example: 4, nullable: true },
+          breed: { type: "string", example: "Labrador", nullable: true },
+          weight: { type: "number", example: 22.5, nullable: true },
+          gender: { $ref: "#/components/schemas/PetGender" },
+          photoUrl: { type: "string", example: "https://example.com/dog.jpg", nullable: true },
+          illnesses: { type: "string", nullable: true },
+          allergies: { type: "string", nullable: true },
+          vaccines: { type: "string", nullable: true },
+          vet: { type: "string", nullable: true },
+          notes: { type: "string", nullable: true }
+        }
+      },
+      UpdatePetRequest: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          age: { type: "integer", nullable: true },
+          breed: { type: "string", nullable: true },
+          weight: { type: "number", nullable: true },
+          gender: { $ref: "#/components/schemas/PetGender" },
+          photoUrl: { type: "string", nullable: true },
+          illnesses: { type: "string", nullable: true },
+          allergies: { type: "string", nullable: true },
+          vaccines: { type: "string", nullable: true },
+          vet: { type: "string", nullable: true },
+          notes: { type: "string", nullable: true }
+        }
+      },
+      PetResponse: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          accountId: { type: "string" },
+          name: { type: "string" },
+          age: { type: "integer", nullable: true },
+          breed: { type: "string", nullable: true },
+          weight: { type: "number", nullable: true },
+          gender: { $ref: "#/components/schemas/PetGender" },
+          photoUrl: { type: "string", nullable: true },
+          illnesses: { type: "string", nullable: true },
+          allergies: { type: "string", nullable: true },
+          vaccines: { type: "string", nullable: true },
+          vet: { type: "string", nullable: true },
+          notes: { type: "string", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" }
         }
       }
     }
