@@ -1,7 +1,8 @@
+import { addDogStyles as styles } from "@/features/home/styles";
+import { genderOptions, useCreatePetForm } from "@/features/pets/usePetForm";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -12,143 +13,35 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { ApiError } from "@/services/api-client";
-import { getAccessToken } from "@/services/auth-storage";
-import { createPet } from "@/services/pets-service";
-import { PetGender } from "@/types/pets";
-import { addDogStyles as styles } from "./styles";
 
-type DogForm = {
-  photoUrl: string; // do zmiany będzie nie na zasadzie linku
-  name: string;
-  age: string;
-  breed: string;
-  weight: string;
-  gender: PetGender | "";
-  illnesses: string;
-  allergies: string;
-  vaccines: string;
-  vet: string;
-  notes: string;
-};
+const formatDocumentSize = (size?: number) => {
+  if (!size) {
+    return "PDF";
+  }
 
-const initialForm: DogForm = {
-  photoUrl: "", // do zmiany nie na zasadzie linku
-  name: "",
-  age: "",
-  breed: "",
-  weight: "",
-  gender: "",
-  illnesses: "",
-  allergies: "",
-  vaccines: "",
-  vet: "",
-  notes: ""
-};
+  if (size < 1024 * 1024) {
+    return `${Math.ceil(size / 1024)} KB`;
+  }
 
-const genderOptions: Array<{ value: PetGender; label: string; icon: string }> = [
-  { value: "MALE", label: "Samiec", icon: "gender-male" },
-  { value: "FEMALE", label: "Samica", icon: "gender-female" }
-];
-
-const optionalText = (value: string) => {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const parseOptionalNumber = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-
-  const parsed = Number(trimmed.replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const parseOptionalInt = (value: string) => {
-  const parsed = parseOptionalNumber(value);
-  if (parsed === undefined || parsed === null) return parsed;
-  return Number.isInteger(parsed) ? parsed : null;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 export default function AddDogScreen() {
-  const [form, setForm] = useState<DogForm>(initialForm);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const updateField = (field: keyof DogForm, value: string) => {
-    setForm((currentForm) => ({
-      ...currentForm,
-      [field]: value
-    }));
-  };
-
-  const handleSave = async () => {
-    if (isSubmitting) return;
-
-    setError("");
-    setSuccess("");
-
-    if (!form.name.trim()) {
-      setError("Imię jest wymagane");
-      return;
-    }
-
-    if (!form.gender) {
-      setError("Wybierz płeć zwierzaka");
-      return;
-    }
-
-    const age = parseOptionalInt(form.age);
-    if (age === null) {
-      setError("Wiek musi być liczbą całkowitą");
-      return;
-    }
-
-    const weight = parseOptionalNumber(form.weight);
-    if (weight === null) {
-      setError("Waga musi być liczbą");
-      return;
-    }
-
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
-      setError("Zaloguj się ponownie, aby dodać zwierzaka");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      await createPet(
-        {
-          name: form.name.trim(),
-          gender: form.gender,
-          age,
-          breed: optionalText(form.breed),
-          weight,
-          photoUrl: optionalText(form.photoUrl),
-          illnesses: optionalText(form.illnesses),
-          allergies: optionalText(form.allergies),
-          vaccines: optionalText(form.vaccines),
-          vet: optionalText(form.vet),
-          notes: optionalText(form.notes)
-        },
-        accessToken
-      );
-
-      setSuccess("Zwierzak został dodany");
-      setForm(initialForm);
-    } catch (requestError) {
-      if (requestError instanceof ApiError) {
-        setError(requestError.message || "Nie udało się dodać zwierzaka");
-      } else {
-        setError("Nie udało się dodać zwierzaka");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const {
+    form,
+    error,
+    success,
+    isSubmitting,
+    isPickingPhoto,
+    documents,
+    isPickingDocument,
+    updateField,
+    pickPhoto,
+    clearPhoto,
+    pickDocuments,
+    removeDocument,
+    handleSave
+  } = useCreatePetForm();
 
   return (
     <KeyboardAvoidingView
@@ -173,16 +66,51 @@ export default function AddDogScreen() {
           </View>
         </View>
 
-        <View style={styles.photoCard}>
+        <TouchableOpacity
+          style={styles.photoCard}
+          activeOpacity={0.85}
+          disabled={isPickingPhoto}
+          onPress={pickPhoto}
+        >
           {form.photoUrl.trim() ? (
-            <Image source={{ uri: form.photoUrl.trim() }} style={styles.photoPreview} />
+            <>
+              <Image source={{ uri: form.photoUrl.trim() }} style={styles.photoPreview} />
+              <View style={styles.photoActions}>
+                <TouchableOpacity
+                  style={styles.photoButton}
+                  activeOpacity={0.85}
+                  disabled={isPickingPhoto}
+                  onPress={pickPhoto}
+                >
+                  {isPickingPhoto ? (
+                    <ActivityIndicator color="#D35400" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons name="image-edit-outline" size={18} color="#D35400" />
+                      <Text style={styles.photoButtonText}>Zmień zdjęcie</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.photoRemoveButton} activeOpacity={0.85} onPress={clearPhoto}>
+                  <MaterialCommunityIcons name="trash-can-outline" size={18} color="#B42318" />
+                </TouchableOpacity>
+              </View>
+            </>
           ) : (
             <View style={styles.photoPlaceholder}>
-              <MaterialCommunityIcons name="camera-plus-outline" size={36} color="#D35400" />
-              <Text style={styles.photoTitle}>Dodaj zdjęcie</Text>
+              {isPickingPhoto ? (
+                <ActivityIndicator color="#D35400" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="camera-plus-outline" size={36} color="#D35400" />
+                  <Text style={styles.photoTitle}>Dodaj zdjęcie</Text>
+                  <Text style={styles.photoSubtitle}>Wybierz z galerii</Text>
+                </>
+              )}
             </View>
           )}
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.formCard}>
           <Text style={styles.sectionTitle}>Podstawowe dane</Text>
@@ -233,12 +161,7 @@ export default function AddDogScreen() {
                   style={[styles.genderOption, isActive && styles.genderOptionActive]}
                   onPress={() => updateField("gender", option.value)}
                 >
-                  <View
-                    style={[
-                      styles.genderIconCircle,
-                      isActive && styles.genderIconCircleActive
-                    ]}
-                  >
+                  <View style={[styles.genderIconCircle, isActive && styles.genderIconCircleActive]}>
                     <MaterialCommunityIcons
                       name={option.icon}
                       size={20}
@@ -286,6 +209,54 @@ export default function AddDogScreen() {
             multiline
             textAlignVertical="top"
           />
+
+          <View style={styles.documentsHeader}>
+            <Text style={styles.fieldLabel}>Dokumenty PDF</Text>
+            <TouchableOpacity
+              style={styles.documentAddButton}
+              activeOpacity={0.85}
+              disabled={isPickingDocument}
+              onPress={pickDocuments}
+            >
+              {isPickingDocument ? (
+                <ActivityIndicator color="#D35400" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="file-pdf-box" size={18} color="#D35400" />
+                  <Text style={styles.documentAddButtonText}>Dodaj PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {documents.length ? (
+            <View style={styles.documentsList}>
+              {documents.map((document) => (
+                <View key={document.id} style={styles.documentRow}>
+                  <View style={styles.documentIcon}>
+                    <MaterialCommunityIcons name="file-pdf-box" size={22} color="#D35400" />
+                  </View>
+
+                  <View style={styles.documentInfo}>
+                    <Text style={styles.documentName} numberOfLines={1}>
+                      {document.name}
+                    </Text>
+                    <Text style={styles.documentMeta}>{formatDocumentSize(document.size)}</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.documentRemoveButton}
+                    activeOpacity={0.85}
+                    onPress={() => removeDocument(document.id)}
+                  >
+                    <MaterialCommunityIcons name="trash-can-outline" size={18} color="#B42318" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.documentsEmpty}>Możesz dodać np. książeczkę szczepień.</Text>
+          )}
 
           <TextInput
             style={styles.input}

@@ -1,7 +1,8 @@
+import { addDogStyles as styles } from "@/features/home/styles";
+import { genderOptions, useEditPetForm } from "@/features/pets/usePetForm";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,208 +13,11 @@ import {
   View
 } from "react-native";
 
-import { ApiError } from "@/services/api-client";
-import { getAccessToken } from "@/services/auth-storage";
-import { getPet, updatePet } from "@/services/pets-service";
-import { Pet, PetGender } from "@/types/pets";
-import { addDogStyles as styles } from "../styles";
-
-type DogForm = {
-  photoUrl: string;
-  name: string;
-  age: string;
-  breed: string;
-  weight: string;
-  gender: PetGender | "";
-  illnesses: string;
-  allergies: string;
-  vaccines: string;
-  vet: string;
-  notes: string;
-};
-
-const initialForm: DogForm = {
-  photoUrl: "",
-  name: "",
-  age: "",
-  breed: "",
-  weight: "",
-  gender: "",
-  illnesses: "",
-  allergies: "",
-  vaccines: "",
-  vet: "",
-  notes: ""
-};
-
-const genderOptions: Array<{ value: PetGender; label: string; icon: string }> = [
-  { value: "MALE", label: "Samiec", icon: "gender-male" },
-  { value: "FEMALE", label: "Samica", icon: "gender-female" }
-];
-
-const optionalText = (value: string) => {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-};
-
-const parseOptionalNumber = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-
-  const parsed = Number(trimmed.replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const parseOptionalInt = (value: string) => {
-  const parsed = parseOptionalNumber(value);
-  if (parsed === undefined || parsed === null) return parsed;
-  return Number.isInteger(parsed) ? parsed : null;
-};
-
-function mapPetToForm(pet: Pet): DogForm {
-  return {
-    photoUrl: pet.photoUrl ?? "",
-    name: pet.name,
-    age: pet.age !== null ? String(pet.age) : "",
-    breed: pet.breed ?? "",
-    weight: pet.weight !== null ? String(pet.weight) : "",
-    gender: pet.gender,
-    illnesses: pet.illnesses ?? "",
-    allergies: pet.allergies ?? "",
-    vaccines: pet.vaccines ?? "",
-    vet: pet.vet ?? "",
-    notes: pet.notes ?? ""
-  };
-}
-
 export default function PetDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const [form, setForm] = useState<DogForm>(initialForm);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const updateField = (field: keyof DogForm, value: string) => {
-    setForm((currentForm) => ({
-      ...currentForm,
-      [field]: value
-    }));
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadPet = async () => {
-      if (!id) {
-        setError("Nie znaleziono zwierzaka");
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const accessToken = await getAccessToken();
-        if (!accessToken) {
-          setError("Zaloguj się ponownie, aby zobaczyć profil");
-          setIsLoading(false);
-          return;
-        }
-
-        const response = await getPet(String(id), accessToken);
-        if (isMounted) {
-          setForm(mapPetToForm(response.pet));
-        }
-      } catch (requestError) {
-        if (requestError instanceof ApiError) {
-          setError(requestError.message || "Nie udało się pobrać profilu");
-        } else {
-          setError("Nie udało się pobrać profilu");
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadPet();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [id]);
-
-  const handleSave = async () => {
-    if (isSubmitting) return;
-
-    setError("");
-    setSuccess("");
-
-    if (!id) {
-      setError("Nie znaleziono zwierzaka");
-      return;
-    }
-
-    if (!form.name.trim()) {
-      setError("Imię jest wymagane");
-      return;
-    }
-
-    if (!form.gender) {
-      setError("Wybierz płeć zwierzaka");
-      return;
-    }
-
-    const age = parseOptionalInt(form.age);
-    if (age === null) {
-      setError("Wiek musi być liczbą całkowitą");
-      return;
-    }
-
-    const weight = parseOptionalNumber(form.weight);
-    if (weight === null) {
-      setError("Waga musi być liczbą");
-      return;
-    }
-
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
-      setError("Zaloguj się ponownie, aby zapisać zmiany");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      await updatePet(
-        String(id),
-        {
-          name: form.name.trim(),
-          gender: form.gender,
-          age,
-          breed: optionalText(form.breed),
-          weight,
-          photoUrl: optionalText(form.photoUrl),
-          illnesses: optionalText(form.illnesses),
-          allergies: optionalText(form.allergies),
-          vaccines: optionalText(form.vaccines),
-          vet: optionalText(form.vet),
-          notes: optionalText(form.notes)
-        },
-        accessToken
-      );
-
-      setSuccess("Zapisano zmiany");
-    } catch (requestError) {
-      if (requestError instanceof ApiError) {
-        setError(requestError.message || "Nie udało się zapisać zmian");
-      } else {
-        setError("Nie udało się zapisać zmian");
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const { form, error, success, isSubmitting, isLoading, updateField, handleSave } = useEditPetForm(
+    id ? String(id) : undefined
+  );
 
   return (
     <KeyboardAvoidingView
@@ -292,12 +96,7 @@ export default function PetDetailsScreen() {
                     style={[styles.genderOption, isActive && styles.genderOptionActive]}
                     onPress={() => updateField("gender", option.value)}
                   >
-                    <View
-                      style={[
-                        styles.genderIconCircle,
-                        isActive && styles.genderIconCircleActive
-                      ]}
-                    >
+                    <View style={[styles.genderIconCircle, isActive && styles.genderIconCircleActive]}>
                       <MaterialCommunityIcons
                         name={option.icon}
                         size={20}

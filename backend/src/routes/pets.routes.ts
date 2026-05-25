@@ -49,7 +49,12 @@ petsRouter.get(
       throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
     }
 
-    const pet = await getPet(req.auth.accountId, req.auth.role, req.params.petId);
+    const petId = req.params.petId;
+    if (Array.isArray(petId)) {
+      throw new AppError(400, "Invalid pet id", "VALIDATION_ERROR");
+    }
+
+    const pet = await getPet(req.auth.accountId, req.auth.role, petId);
 
     res.status(200).json({
       pet
@@ -66,7 +71,12 @@ petsRouter.patch(
     }
 
     const payload = updatePetSchema.parse(req.body);
-    const pet = await updatePet(req.auth.accountId, req.auth.role, req.params.petId, payload);
+    const petId = req.params.petId;
+    if (Array.isArray(petId)) {
+      throw new AppError(400, "Invalid pet id", "VALIDATION_ERROR");
+    }
+
+    const pet = await updatePet(req.auth.accountId, req.auth.role, petId, payload);
 
     res.status(200).json({
       pet

@@ -1,12 +1,15 @@
 import { router } from "expo-router";
 import { ScrollView, View } from "react-native";
-import { ActionCard } from "./components/ActionCard";
-import { DogsCard } from "./components/DogsCard";
-import { Header } from "./components/Header";
-import { WalksCard } from "./components/WalksCard";
-import { styles } from "./styles";
+import { ActionCard } from "@/features/home/components/ActionCard";
+import { DogsCard } from "@/features/home/components/DogsCard";
+import { Header } from "@/features/home/components/Header";
+import { WalksCard } from "@/features/home/components/WalksCard";
+import { styles } from "@/features/home/styles";
+import { usePetsList } from "@/features/pets/usePetsList";
 
 export default function MainScreen() {
+  const { pets, isLoading, error } = usePetsList();
+
   return (
     <ScrollView
       style={styles.container}
@@ -33,7 +36,13 @@ export default function MainScreen() {
         />
       </View>
 
-      <DogsCard onAddDog={() => router.push("../mainScreen/AddDogScreen")} />
+      <DogsCard
+        pets={pets}
+        isLoading={isLoading}
+        error={error}
+        onAddDog={() => router.push("../mainScreen/AddDogScreen")}
+        onOpenPet={(petId) => router.push(`../mainScreen/pets/${petId}`)}
+      />
 
       <WalksCard />
     </ScrollView>
