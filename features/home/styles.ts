@@ -331,6 +331,37 @@ export const addDogStyles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: "#FFF0D2"
   },
+  photoActions: {
+    flexDirection: "row",
+    gap: 10
+  },
+  photoButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    backgroundColor: "#FFF8F0",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8
+  },
+  photoButtonText: {
+    color: "#D35400",
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  photoRemoveButton: {
+    width: 44,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F6C8C3",
+    backgroundColor: "#FFF1F0",
+    alignItems: "center",
+    justifyContent: "center"
+  },
   photoTitle: {
     color: "#3D2415",
     fontSize: 16,
@@ -426,6 +457,82 @@ export const addDogStyles = StyleSheet.create({
   },
   genderLabelActive: {
     color: "#FFFFFF"
+  },
+
+  documentsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8
+  },
+  documentAddButton: {
+    minHeight: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    backgroundColor: "#FFF8F0",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 7
+  },
+  documentAddButtonText: {
+    color: "#D35400",
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  documentsList: {
+    gap: 8,
+    marginBottom: 10
+  },
+  documentRow: {
+    minHeight: 58,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    backgroundColor: "#FFF8F0",
+    padding: 10,
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
+  documentIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: "#FFF0D2",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  documentInfo: {
+    flex: 1
+  },
+  documentName: {
+    color: "#3D2415",
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  documentMeta: {
+    color: "#8A6D5B",
+    fontSize: 11,
+    marginTop: 2
+  },
+  documentRemoveButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#FFF1F0",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  documentsEmpty: {
+    color: "#8A6D5B",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: -2,
+    marginBottom: 10
   },
 
   statusTextError: {

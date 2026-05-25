@@ -1,5 +1,5 @@
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useRegisterForm } from "@/features/register/useRegisterForm";
+import { useRegisterForm } from "@/features/auth/useRegisterForm";
 
 export default function RegisterScreen() {
   const {
