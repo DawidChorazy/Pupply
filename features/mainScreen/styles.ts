@@ -1,4 +1,43 @@
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
+
+const raisedShadow = Platform.select({
+  web: {
+    boxShadow: "0 8px 14px rgba(107, 58, 24, 0.06)"
+  },
+  default: {
+    shadowColor: "#6B3A18",
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3
+  }
+});
+
+const buttonShadow = Platform.select({
+  web: {
+    boxShadow: "0 8px 14px rgba(211, 84, 0, 0.2)"
+  },
+  default: {
+    shadowColor: "#D35400",
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  }
+});
+
+const smallShadow = Platform.select({
+  web: {
+    boxShadow: "0 6px 12px rgba(107, 58, 24, 0.08)"
+  },
+  default: {
+    shadowColor: "#6B3A18",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3
+  }
+});
 
 export const styles = StyleSheet.create({
   container: {
@@ -40,11 +79,7 @@ export const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#6B3A18",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3
+    ...smallShadow
   },
 
   quickActionsRow: {
@@ -60,11 +95,7 @@ export const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: "#F2E4D8",
-    shadowColor: "#6B3A18",
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3
+    ...raisedShadow
   },
   actionIconBox: {
     width: 42,
@@ -106,11 +137,7 @@ export const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#F2E4D8",
-    shadowColor: "#6B3A18",
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3
+    ...raisedShadow
   },
   sectionHeader: {
     flexDirection: "row",
@@ -140,11 +167,7 @@ export const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: "#F2E4D8",
-    shadowColor: "#6B3A18",
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3
+    ...raisedShadow
   },
   emptyIllustration: {
     height: 108,
@@ -262,11 +285,7 @@ export const addDogStyles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#6B3A18",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3
+    ...smallShadow
   },
   headerCopy: {
     flex: 1
@@ -296,11 +315,7 @@ export const addDogStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F2E4D8",
     marginBottom: 14,
-    shadowColor: "#6B3A18",
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3
+    ...raisedShadow
   },
   photoPlaceholder: {
     height: 170,
@@ -335,11 +350,7 @@ export const addDogStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F2E4D8",
     marginBottom: 14,
-    shadowColor: "#6B3A18",
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3
+    ...raisedShadow
   },
   sectionTitle: {
     color: "#3D2415",
@@ -436,11 +447,7 @@ export const addDogStyles = StyleSheet.create({
     backgroundColor: "#D35400",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#D35400",
-    shadowOpacity: 0.2,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4
+    ...buttonShadow
   },
   saveButtonDisabled: {
     opacity: 0.7

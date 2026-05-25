@@ -1,3 +1,7 @@
+import { ApiError } from "@/services/api-client";
+import { getAccessToken } from "@/services/auth-storage";
+import { createPet } from "@/services/pets-service";
+import { PetGender } from "@/types/pets";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { router } from "expo-router";
@@ -12,11 +16,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { ApiError } from "@/services/api-client";
-import { getAccessToken } from "@/services/auth-storage";
-import { createPet } from "@/services/pets-service";
-import { PetGender } from "@/types/pets";
-import { addDogStyles as styles } from "./styles";
+import { addDogStyles as styles } from "@/features/mainScreen/styles";
 
 type DogForm = {
   photoUrl: string; // do zmiany będzie nie na zasadzie linku
@@ -46,7 +46,7 @@ const initialForm: DogForm = {
   notes: ""
 };
 
-const genderOptions: Array<{ value: PetGender; label: string; icon: string }> = [
+const genderOptions: { value: PetGender; label: string; icon: string }[] = [
   { value: "MALE", label: "Samiec", icon: "gender-male" },
   { value: "FEMALE", label: "Samica", icon: "gender-female" }
 ];
@@ -238,9 +238,9 @@ export default function AddDogScreen() {
                       styles.genderIconCircle,
                       isActive && styles.genderIconCircleActive
                     ]}
-                  >
+                  > 
                     <MaterialCommunityIcons
-                      name={option.icon}
+                      value={option.icon}
                       size={20}
                       color={isActive ? "#FFFFFF" : "#D35400"}
                     />

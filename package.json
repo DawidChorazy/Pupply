@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
+    "dev": "npm run start",
     "start": "concurrently -n \"frontend,backend\" -c \"cyan,magenta\" \"npm run start:frontend\" \"npm run backend:dev\"",
     "start:frontend": "expo start",
     "reset-project": "node ./scripts/reset-project.js",

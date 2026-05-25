@@ -203,8 +203,8 @@ export default function HomeScreen()  {
                 style={styles.loginButton}
                 activeOpacity={0.8}
                 disabled={isSubmitting || isGoogleSubmitting}
-                onPress={loginValidation}// do odkomentowania jak login zadziala i usunąć linie poniżej
-               // onPress={() => router.push("../mainScreen/MainScreen")}
+                //onPress={loginValidation}// do odkomentowania jak login zadziala i usunąć linie poniżej
+                onPress={() => router.push("../mainScreen/MainScreen")}
               >
                 {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginButtonText}>Zaloguj się</Text>}
               </TouchableOpacity>
@@ -323,10 +323,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 60,
     marginTop: 60,
-    shadowColor: '#000',
-    shadowRadius: 10,
-    shadowOpacity: 0.2,
-    shadowOffset: {width: 2, height: -10},
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: "2px -10px 10px rgba(0, 0, 0, 0.2)"
+      },
+      default: {
+        shadowColor: '#000',
+        shadowRadius: 10,
+        shadowOpacity: 0.2,
+        shadowOffset: { width: 2, height: -10 },
+        elevation: 8
+      }
+    })
   },
 });

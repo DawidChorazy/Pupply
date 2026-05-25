@@ -1,10 +1,10 @@
 import { router } from "expo-router";
 import { ScrollView, View } from "react-native";
-import { ActionCard } from "./components/ActionCard";
-import { DogsCard } from "./components/DogsCard";
-import { Header } from "./components/Header";
-import { WalksCard } from "./components/WalksCard";
-import { styles } from "./styles";
+import { ActionCard } from "@/features/mainScreen/components/ActionCard";
+import { DogsCard } from "@/features/mainScreen/components/DogsCard";
+import { Header } from "@/features/mainScreen/components/Header";
+import { WalksCard } from "@/features/mainScreen/components/WalksCard";
+import { styles } from "@/features/mainScreen/styles";
 
 export default function MainScreen() {
   return (

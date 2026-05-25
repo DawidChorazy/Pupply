@@ -16,7 +16,7 @@ import { ApiError } from "@/services/api-client";
 import { getAccessToken } from "@/services/auth-storage";
 import { getPet, updatePet } from "@/services/pets-service";
 import { Pet, PetGender } from "@/types/pets";
-import { addDogStyles as styles } from "../styles";
+import { addDogStyles as styles } from "@/features/mainScreen/styles";
 
 type DogForm = {
   photoUrl: string;
@@ -46,7 +46,7 @@ const initialForm: DogForm = {
   notes: ""
 };
 
-const genderOptions: Array<{ value: PetGender; label: string; icon: string }> = [
+const genderOptions: { value: PetGender; label: string; icon: string }[] = [
   { value: "MALE", label: "Samiec", icon: "gender-male" },
   { value: "FEMALE", label: "Samica", icon: "gender-female" }
 ];

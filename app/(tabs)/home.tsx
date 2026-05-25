@@ -1,6 +1,6 @@
 import { Fonts } from '@/constants/theme';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen()  {
@@ -131,11 +131,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 5,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 5px rgba(0, 0, 0, 0.2)"
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 5,
+        elevation: 5
+      }
+    })
   },
   loginButtonText: {
     color: '#4B3621',
