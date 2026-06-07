@@ -243,6 +243,52 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 14
   },
+  walksList: {
+    gap: 10
+  },
+  walkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2E4D8",
+    gap: 10
+  },
+  walkRowLast: {
+    borderBottomWidth: 0
+  },
+  walksIconCircleSmall: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFF0D2",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  walkInfo: {
+    flex: 1
+  },
+  walkTitle: {
+    color: "#3D2415",
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  walkMeta: {
+    color: "#8A6D5B",
+    fontSize: 12,
+    marginTop: 2
+  },
+  walkStatusBadge: {
+    borderRadius: 999,
+    backgroundColor: "#ECFDF3",
+    paddingVertical: 6,
+    paddingHorizontal: 9
+  },
+  walkStatusText: {
+    color: "#067647",
+    fontSize: 11,
+    fontWeight: "800"
+  },
   secondaryButton: {
     marginTop: 16,
     borderRadius: 12,
