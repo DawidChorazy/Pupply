@@ -1,23 +1,41 @@
 import { addDogStyles as styles } from "@/features/home/styles";
-import { genderOptions, useEditPetForm } from "@/features/pets/usePetForm";
+import { PetEditForm } from "@/features/pets/components/PetEditForm";
+import { PetPreview } from "@/features/pets/components/PetPreview";
+import { useEditPetForm } from "@/features/pets/usePetForm";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { router, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   View
 } from "react-native";
 
 export default function PetDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { form, error, success, isSubmitting, isLoading, updateField, handleSave } = useEditPetForm(
-    id ? String(id) : undefined
-  );
+  const [isEditing, setIsEditing] = useState(false);
+  const {
+    form,
+    error,
+    success,
+    isSubmitting,
+    isLoading,
+    isPickingPhoto,
+    updateField,
+    pickPhoto,
+    clearPhoto,
+    handleSave,
+    revertChanges
+  } = useEditPetForm(id ? String(id) : undefined, () => setIsEditing(false));
+
+  const handleCancelEdit = () => {
+    revertChanges();
+    setIsEditing(false);
+  };
 
   return (
     <KeyboardAvoidingView
@@ -37,8 +55,10 @@ export default function PetDetailsScreen() {
 
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>Profil</Text>
-            <Text style={styles.title}>Szczegóły zwierzaka</Text>
-            <Text style={styles.subtitle}>Zmieniaj dane i zapisz aktualizacje.</Text>
+            <Text style={styles.title}>{isEditing ? "Edytuj zwierzaka" : form.name.trim() || "Zwierzak"}</Text>
+            <Text style={styles.subtitle}>
+              {isEditing ? "Zmień dane i zapisz aktualizacje." : "Podgląd profilu zwierzaka."}
+            </Text>
           </View>
         </View>
 
@@ -46,139 +66,24 @@ export default function PetDetailsScreen() {
           <View style={styles.formCard}>
             <ActivityIndicator color="#D35400" />
           </View>
+        ) : isEditing ? (
+          <PetEditForm
+            form={form}
+            error={error}
+            success={success}
+            isSubmitting={isSubmitting}
+            isPickingPhoto={isPickingPhoto}
+            updateField={updateField}
+            pickPhoto={pickPhoto}
+            clearPhoto={clearPhoto}
+            onCancel={handleCancelEdit}
+            onSave={handleSave}
+          />
         ) : (
-          <View style={styles.formCard}>
-            <Text style={styles.sectionTitle}>Podstawowe dane</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Imię"
-              placeholderTextColor="#A98D7B"
-              value={form.name}
-              onChangeText={(value) => updateField("name", value)}
-            />
-
-            <View style={styles.row}>
-              <TextInput
-                style={[styles.input, styles.halfInput]}
-                placeholder="Wiek"
-                placeholderTextColor="#A98D7B"
-                value={form.age}
-                onChangeText={(value) => updateField("age", value)}
-                keyboardType="numeric"
-              />
-
-              <TextInput
-                style={[styles.input, styles.halfInput]}
-                placeholder="Waga"
-                placeholderTextColor="#A98D7B"
-                value={form.weight}
-                onChangeText={(value) => updateField("weight", value)}
-              />
-            </View>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Rasa"
-              placeholderTextColor="#A98D7B"
-              value={form.breed}
-              onChangeText={(value) => updateField("breed", value)}
-            />
-
-            <Text style={styles.fieldLabel}>Płeć</Text>
-            <View style={styles.genderRow}>
-              {genderOptions.map((option) => {
-                const isActive = form.gender === option.value;
-
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[styles.genderOption, isActive && styles.genderOptionActive]}
-                    onPress={() => updateField("gender", option.value)}
-                  >
-                    <View style={[styles.genderIconCircle, isActive && styles.genderIconCircleActive]}>
-                      <MaterialCommunityIcons
-                        name={option.icon}
-                        size={20}
-                        color={isActive ? "#FFFFFF" : "#D35400"}
-                      />
-                    </View>
-                    <Text style={[styles.genderLabel, isActive && styles.genderLabelActive]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          <PetPreview form={form} onEdit={() => setIsEditing(true)} />
         )}
 
-        <View style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Zdrowie i opieka</Text>
-
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Przebyte choroby"
-            placeholderTextColor="#A98D7B"
-            value={form.illnesses}
-            onChangeText={(value) => updateField("illnesses", value)}
-            multiline
-            textAlignVertical="top"
-          />
-
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Alergie i specjalne potrzeby"
-            placeholderTextColor="#A98D7B"
-            value={form.allergies}
-            onChangeText={(value) => updateField("allergies", value)}
-            multiline
-            textAlignVertical="top"
-          />
-
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Zaplanowane szczepienia"
-            placeholderTextColor="#A98D7B"
-            value={form.vaccines}
-            onChangeText={(value) => updateField("vaccines", value)}
-            multiline
-            textAlignVertical="top"
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Weterynarz / kontakt awaryjny"
-            placeholderTextColor="#A98D7B"
-            value={form.vet}
-            onChangeText={(value) => updateField("vet", value)}
-          />
-
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Dodatkowe notatki"
-            placeholderTextColor="#A98D7B"
-            value={form.notes}
-            onChangeText={(value) => updateField("notes", value)}
-            multiline
-            textAlignVertical="top"
-          />
-        </View>
-
-        {error ? <Text style={styles.statusTextError}>{error}</Text> : null}
-        {success ? <Text style={styles.statusTextSuccess}>{success}</Text> : null}
-
-        <TouchableOpacity
-          style={[styles.saveButton, isSubmitting && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.saveButtonText}>Zapisz zmiany</Text>
-          )}
-        </TouchableOpacity>
+        {!isLoading && !isEditing && error ? <Text style={styles.statusTextError}>{error}</Text> : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );

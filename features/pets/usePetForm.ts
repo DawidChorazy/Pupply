@@ -1,11 +1,13 @@
+import { usePetsContext } from "@/features/pets/PetsContext";
 import { ApiError } from "@/services/api-client";
 import { getAccessToken } from "@/services/auth-storage";
+import { createLocalPet, loadLocalPets, updateLocalPet } from "@/services/local-pets-storage";
 import { createPet, getPet, updatePet } from "@/services/pets-service";
 import { CreatePetPayload, Pet, PetGender } from "@/types/pets";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 
 export type PetForm = {
   photoUrl: string;
@@ -225,7 +227,8 @@ function useDocumentPicker(setError: (message: string) => void) {
   };
 }
 
-export function useCreatePetForm() {
+export function useCreatePetForm(onSuccess?: () => void) {
+  const { addPet } = usePetsContext();
   const [form, setForm] = useState<PetForm>(initialPetForm);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -253,18 +256,25 @@ export function useCreatePetForm() {
     }
 
     const accessToken = await getAccessToken();
-    if (!accessToken) {
-      setError("Zaloguj sie ponownie, aby dodac zwierzaka");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      await createPet(result.payload, accessToken);
+      if (!accessToken) {
+        const pet = createLocalPet(result.payload);
+        addPet(pet);
+        setSuccess("Zwierzak zostal dodany");
+        setForm(initialPetForm);
+        clearDocuments();
+        onSuccess?.();
+        return;
+      }
+
+      const response = await createPet(result.payload, accessToken);
+      addPet(response.pet);
       setSuccess("Zwierzak zostal dodany");
       setForm(initialPetForm);
       clearDocuments();
+      onSuccess?.();
     } catch (requestError) {
       if (requestError instanceof ApiError) {
         setError(requestError.message || "Nie udalo sie dodac zwierzaka");
@@ -293,14 +303,27 @@ export function useCreatePetForm() {
   };
 }
 
-export function useEditPetForm(petId?: string) {
+export function useEditPetForm(petId?: string, onSaveSuccess?: () => void) {
+  const { updatePetInList } = usePetsContext();
   const [form, setForm] = useState<PetForm>(initialPetForm);
+  const savedFormRef = useRef<PetForm>(initialPetForm);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { isPickingPhoto, pickPhoto, clearPhoto } = usePhotoPicker(setForm, setError);
   const { documents, isPickingDocument, pickDocuments, removeDocument } = useDocumentPicker(setError);
+
+  const applyLoadedForm = (nextForm: PetForm) => {
+    savedFormRef.current = nextForm;
+    setForm(nextForm);
+  };
+
+  const revertChanges = () => {
+    setForm(savedFormRef.current);
+    setError("");
+    setSuccess("");
+  };
 
   const updateField = (field: PetFormField, value: string) => {
     setForm((currentForm) => ({
@@ -321,15 +344,25 @@ export function useEditPetForm(petId?: string) {
 
       try {
         const accessToken = await getAccessToken();
+
         if (!accessToken) {
-          setError("Zaloguj sie ponownie, aby zobaczyc profil");
-          setIsLoading(false);
+          const localPets = await loadLocalPets();
+          const pet = localPets.find((item) => item.id === petId);
+
+          if (isMounted) {
+            if (pet) {
+              applyLoadedForm(mapPetToForm(pet));
+            } else {
+              setError("Nie znaleziono zwierzaka");
+            }
+          }
+
           return;
         }
 
         const response = await getPet(petId, accessToken);
         if (isMounted) {
-          setForm(mapPetToForm(response.pet));
+          applyLoadedForm(mapPetToForm(response.pet));
         }
       } catch (requestError) {
         if (requestError instanceof ApiError) {
@@ -369,16 +402,31 @@ export function useEditPetForm(petId?: string) {
     }
 
     const accessToken = await getAccessToken();
-    if (!accessToken) {
-      setError("Zaloguj sie ponownie, aby zapisac zmiany");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
-      await updatePet(petId, result.payload, accessToken);
+      if (!accessToken) {
+        const localPets = await loadLocalPets();
+        const existingPet = localPets.find((item) => item.id === petId);
+
+        if (!existingPet) {
+          setError("Nie znaleziono zwierzaka");
+          return;
+        }
+
+        const updatedPet = updateLocalPet(existingPet, result.payload);
+        updatePetInList(updatedPet);
+        applyLoadedForm(mapPetToForm(updatedPet));
+        setSuccess("Zapisano zmiany");
+        onSaveSuccess?.();
+        return;
+      }
+
+      const response = await updatePet(petId, result.payload, accessToken);
+      updatePetInList(response.pet);
+      applyLoadedForm(mapPetToForm(response.pet));
       setSuccess("Zapisano zmiany");
+      onSaveSuccess?.();
     } catch (requestError) {
       if (requestError instanceof ApiError) {
         setError(requestError.message || "Nie udalo sie zapisac zmian");
@@ -404,6 +452,7 @@ export function useEditPetForm(petId?: string) {
     clearPhoto,
     pickDocuments,
     removeDocument,
-    handleSave
+    handleSave,
+    revertChanges
   };
 }

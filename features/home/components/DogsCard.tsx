@@ -1,7 +1,7 @@
 import { Pet } from "@/types/pets";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
-import { ActivityIndicator, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, TouchableOpacity, View } from "react-native";
 
 import { styles } from "../styles";
 
@@ -58,7 +58,11 @@ export function DogsCard({ pets, isLoading = false, error = "", onAddDog, onOpen
                 onPress={() => onOpenPet?.(pet.id)}
               >
                 <View style={styles.petAvatar}>
-                  <MaterialCommunityIcons name="paw" size={18} color="#D35400" />
+                  {pet.photoUrl ? (
+                    <Image source={{ uri: pet.photoUrl }} style={styles.petAvatarImage} />
+                  ) : (
+                    <MaterialCommunityIcons name="paw" size={18} color="#D35400" />
+                  )}
                 </View>
 
                 <View style={styles.petInfo}>
@@ -74,6 +78,11 @@ export function DogsCard({ pets, isLoading = false, error = "", onAddDog, onOpen
               </TouchableOpacity>
             );
           })}
+
+          <TouchableOpacity style={styles.addAnotherPetButton} onPress={onAddDog}>
+            <MaterialCommunityIcons name="plus-circle-outline" size={18} color="#D35400" />
+            <Text style={styles.addAnotherPetText}>Dodaj kolejnego zwierzaka</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
