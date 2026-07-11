@@ -1,4 +1,5 @@
-import { UpcomingWalk } from "@/features/walks/mockData";
+import { UpcomingWalk } from "@/types/walks";
+import { getWalkStage, getWalkStageLabel } from "@/features/walks/walkStage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { TouchableOpacity, View } from "react-native";
@@ -8,9 +9,34 @@ import { styles } from "../styles";
 type WalksCardProps = {
   walks?: UpcomingWalk[];
   onBookWalk?: () => void;
+  onOpenWalk?: (walkId: string) => void;
 };
 
-export function WalksCard({ walks = [], onBookWalk }: WalksCardProps) {
+function getStatusBadgeLabel(walk: UpcomingWalk) {
+  const stage = getWalkStage({ ...walk, bookedAt: walk.bookedAt ?? new Date().toISOString() });
+
+  if (stage === "completed") {
+    return "Zakończony";
+  }
+
+  return getWalkStageLabel(stage);
+}
+
+function getStatusBadgeStyle(walk: UpcomingWalk) {
+  const stage = getWalkStage({ ...walk, bookedAt: walk.bookedAt ?? new Date().toISOString() });
+
+  if (stage === "completed") {
+    return styles.walkStatusBadgeCompleted;
+  }
+
+  if (stage === "in_progress" || stage === "returning") {
+    return styles.walkStatusBadgeActive;
+  }
+
+  return styles.walkStatusBadge;
+}
+
+export function WalksCard({ walks = [], onBookWalk, onOpenWalk }: WalksCardProps) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -24,7 +50,12 @@ export function WalksCard({ walks = [], onBookWalk }: WalksCardProps) {
         {walks.length ? (
           <View style={styles.walksList}>
             {walks.map((walk, index) => (
-              <View key={walk.id} style={[styles.walkRow, index === walks.length - 1 && styles.walkRowLast]}>
+              <TouchableOpacity
+                key={walk.id}
+                style={[styles.walkRow, index === walks.length - 1 && styles.walkRowLast]}
+                activeOpacity={0.85}
+                onPress={() => onOpenWalk?.(walk.id)}
+              >
                 <View style={styles.walksIconCircleSmall}>
                   <MaterialCommunityIcons name="walk" size={22} color="#D35400" />
                 </View>
@@ -33,13 +64,15 @@ export function WalksCard({ walks = [], onBookWalk }: WalksCardProps) {
                   <Text style={styles.walkTitle}>
                     {walk.petName} z {walk.caregiverName}
                   </Text>
-                  <Text style={styles.walkMeta}>{walk.time}</Text>
+                  <Text style={styles.walkMeta}>
+                    {walk.time} · {walk.durationLabel} · {walk.price} zł
+                  </Text>
                 </View>
 
-                <View style={styles.walkStatusBadge}>
-                  <Text style={styles.walkStatusText}>{walk.status === "confirmed" ? "Aktywny" : "Oczekuje"}</Text>
+                <View style={getStatusBadgeStyle(walk)}>
+                  <Text style={styles.walkStatusText}>{getStatusBadgeLabel(walk)}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
 
             <TouchableOpacity style={styles.secondaryButton} onPress={onBookWalk}>

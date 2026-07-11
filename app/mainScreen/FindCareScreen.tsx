@@ -1,56 +1,16 @@
+import { caregivers } from "@/features/walks/mockData";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { router } from "expo-router";
-import { useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 
-type Caregiver = {
-  id: string;
-  name: string;
-  role: string;
-  rating: string;
-  distance: string;
-  price: string;
-  availability: string;
-  tags: string[];
-};
-
-const caregivers: Caregiver[] = [
-  {
-    id: "care-1",
-    name: "Anna Kowalska",
-    role: "Petsitterka i spacery",
-    rating: "4.9",
-    distance: "1.2 km",
-    price: "35 zł / spacer",
-    availability: "Dzisiaj 16:00-20:00",
-    tags: ["małe psy", "leki", "weekendy"]
-  },
-  {
-    id: "care-2",
-    name: "Michał Nowak",
-    role: "Aktywne spacery",
-    rating: "4.8",
-    distance: "2.4 km",
-    price: "40 zł / spacer",
-    availability: "Jutro od 9:00",
-    tags: ["duże psy", "bieganie", "socjalizacja"]
-  },
-  {
-    id: "care-3",
-    name: "Kasia Zielińska",
-    role: "Opieka dzienna",
-    rating: "5.0",
-    distance: "3.1 km",
-    price: "55 zł / wizyta",
-    availability: "W tygodniu po 15:00",
-    tags: ["szczeniaki", "koty", "transport"]
-  }
-];
-
 export default function FindCareScreen() {
-  const [selectedCaregiverId, setSelectedCaregiverId] = useState<string | null>(null);
-  const selectedCaregiver = caregivers.find((caregiver) => caregiver.id === selectedCaregiverId);
+  const openBooking = (caregiverId: string) => {
+    router.push({
+      pathname: "/mainScreen/BookWalkScreen",
+      params: { caregiverId }
+    });
+  };
 
   return (
     <ScrollView
@@ -70,75 +30,60 @@ export default function FindCareScreen() {
         </View>
       </View>
 
-      {selectedCaregiver ? (
-        <View style={styles.selectionBanner}>
-          <MaterialCommunityIcons name="check-circle-outline" size={20} color="#067647" />
-          <Text style={styles.selectionText}>Wybrano: {selectedCaregiver.name}. Kolejny krok to formularz rezerwacji.</Text>
-        </View>
-      ) : null}
-
       <View style={styles.list}>
-        {caregivers.map((caregiver) => {
-          const isSelected = selectedCaregiverId === caregiver.id;
-
-          return (
-            <View key={caregiver.id} style={[styles.card, isSelected && styles.cardSelected]}>
-              <View style={styles.cardHeader}>
-                <View style={styles.avatar}>
-                  <MaterialCommunityIcons name="account-heart-outline" size={28} color="#D35400" />
-                </View>
-
-                <View style={styles.caregiverInfo}>
-                  <Text style={styles.caregiverName}>{caregiver.name}</Text>
-                  <Text style={styles.caregiverRole}>{caregiver.role}</Text>
-                </View>
-
-                <View style={styles.ratingBadge}>
-                  <MaterialCommunityIcons name="star" size={14} color="#D9A848" />
-                  <Text style={styles.ratingText}>{caregiver.rating}</Text>
-                </View>
+        {caregivers.map((caregiver) => (
+          <View key={caregiver.id} style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.avatar}>
+                <MaterialCommunityIcons name="account-heart-outline" size={28} color="#D35400" />
               </View>
 
-              <View style={styles.metaGrid}>
-                <View style={styles.metaItem}>
-                  <MaterialCommunityIcons name="map-marker-outline" size={17} color="#8A6D5B" />
-                  <Text style={styles.metaText}>{caregiver.distance}</Text>
-                </View>
-
-                <View style={styles.metaItem}>
-                  <MaterialCommunityIcons name="cash" size={17} color="#8A6D5B" />
-                  <Text style={styles.metaText}>{caregiver.price}</Text>
-                </View>
-
-                <View style={styles.metaItemWide}>
-                  <MaterialCommunityIcons name="clock-outline" size={17} color="#8A6D5B" />
-                  <Text style={styles.metaText}>{caregiver.availability}</Text>
-                </View>
+              <View style={styles.caregiverInfo}>
+                <Text style={styles.caregiverName}>{caregiver.name}</Text>
+                <Text style={styles.caregiverRole}>{caregiver.role}</Text>
               </View>
 
-              <View style={styles.tagsRow}>
-                {caregiver.tags.map((tag) => (
-                  <View key={tag} style={styles.tag}>
-                    <Text style={styles.tagText}>{tag}</Text>
-                  </View>
-                ))}
+              <View style={styles.ratingBadge}>
+                <MaterialCommunityIcons name="star" size={14} color="#D9A848" />
+                <Text style={styles.ratingText}>{caregiver.rating}</Text>
               </View>
-
-              <TouchableOpacity
-                style={[styles.bookButton, isSelected && styles.bookButtonSelected]}
-                activeOpacity={0.85}
-                onPress={() => setSelectedCaregiverId(caregiver.id)}
-              >
-                <Text style={styles.bookButtonText}>{isSelected ? "Wybrano opiekuna" : "Umów spacer"}</Text>
-                <MaterialCommunityIcons
-                  name={isSelected ? "check" : "arrow-right"}
-                  size={18}
-                  color="#FFFFFF"
-                />
-              </TouchableOpacity>
             </View>
-          );
-        })}
+
+            <View style={styles.metaGrid}>
+              <View style={styles.metaItem}>
+                <MaterialCommunityIcons name="map-marker-outline" size={17} color="#8A6D5B" />
+                <Text style={styles.metaText}>{caregiver.distance}</Text>
+              </View>
+
+              <View style={styles.metaItem}>
+                <MaterialCommunityIcons name="cash" size={17} color="#8A6D5B" />
+                <Text style={styles.metaText}>{caregiver.priceLabel}</Text>
+              </View>
+
+              <View style={styles.metaItemWide}>
+                <MaterialCommunityIcons name="clock-outline" size={17} color="#8A6D5B" />
+                <Text style={styles.metaText}>{caregiver.availability}</Text>
+              </View>
+            </View>
+
+            <View style={styles.tagsRow}>
+              {caregiver.tags.map((tag) => (
+                <View key={tag} style={styles.tag}>
+                  <Text style={styles.tagText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.bookButton}
+              activeOpacity={0.85}
+              onPress={() => openBooking(caregiver.id)}
+            >
+              <Text style={styles.bookButtonText}>Umów spacer</Text>
+              <MaterialCommunityIcons name="arrow-right" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        ))}
       </View>
     </ScrollView>
   );
@@ -188,24 +133,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 4
   },
-  selectionBanner: {
-    borderRadius: 16,
-    backgroundColor: "#ECFDF3",
-    borderWidth: 1,
-    borderColor: "#ABEFC6",
-    padding: 12,
-    marginBottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8
-  },
-  selectionText: {
-    flex: 1,
-    color: "#067647",
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "700"
-  },
   list: {
     gap: 14
   },
@@ -215,9 +142,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#F2E4D8"
-  },
-  cardSelected: {
-    borderColor: "#D35400"
   },
   cardHeader: {
     flexDirection: "row",
@@ -316,9 +240,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 8
-  },
-  bookButtonSelected: {
-    backgroundColor: "#067647"
   },
   bookButtonText: {
     color: "#FFFFFF",
