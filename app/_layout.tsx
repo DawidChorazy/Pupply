@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { GamificationProvider } from '@/features/gamification/GamificationContext';
+import { PetsProvider } from '@/features/pets/PetsContext';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -16,16 +17,19 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <GamificationProvider>
-        <Stack initialRouteName="index">
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="mainScreen/MainScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="mainScreen/AddDogScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="mainScreen/FindCareScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="mainScreen/ProfileScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="mainScreen/LeaderboardScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="mainScreen/QuestsScreen" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        </Stack>
+        <PetsProvider>
+          <Stack initialRouteName="index">
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="mainScreen/MainScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="mainScreen/AddDogScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="mainScreen/pets/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="mainScreen/FindCareScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="mainScreen/ProfileScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="mainScreen/LeaderboardScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="mainScreen/QuestsScreen" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+        </PetsProvider>
       </GamificationProvider>
       <StatusBar style="auto" />
     </ThemeProvider>

@@ -41,7 +41,7 @@ export default function AddDogScreen() {
     pickDocuments,
     removeDocument,
     handleSave
-  } = useCreatePetForm();
+  } = useCreatePetForm(() => router.back());
 
   return (
     <KeyboardAvoidingView
