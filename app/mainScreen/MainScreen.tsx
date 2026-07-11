@@ -5,12 +5,13 @@ import { WalksCard } from "@/features/home/components/WalksCard";
 import { styles } from "@/features/home/styles";
 import { BottomMenu } from "@/features/navigation/BottomMenu";
 import { usePetsList } from "@/features/pets/usePetsList";
-import { upcomingWalks } from "@/features/walks/mockData";
+import { useWalksList } from "@/features/walks/useWalksList";
 import { router } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 export default function MainScreen() {
   const { pets, isLoading, error } = usePetsList();
+  const { walks } = useWalksList();
   const openCaregivers = () => router.push("../mainScreen/FindCareScreen");
 
   return (
@@ -49,13 +50,17 @@ export default function MainScreen() {
           onOpenPet={(petId) => router.push(`../mainScreen/pets/${petId}`)}
         />
 
-        <WalksCard walks={upcomingWalks} onBookWalk={openCaregivers} />
+        <WalksCard
+          walks={walks}
+          onBookWalk={openCaregivers}
+          onOpenWalk={(walkId) => router.push(`../mainScreen/walks/${walkId}`)}
+        />
       </ScrollView>
 
       <BottomMenu activeTab="home" />
     </View>
   );
-}// 
+}
 
 const screenStyles = StyleSheet.create({
   shell: {

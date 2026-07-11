@@ -300,9 +300,27 @@ export const styles = StyleSheet.create({
   },
   walkStatusBadge: {
     borderRadius: 999,
+    backgroundColor: "#FFF8F0",
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "#F2E4D8"
+  },
+  walkStatusBadgeActive: {
+    borderRadius: 999,
     backgroundColor: "#ECFDF3",
     paddingVertical: 6,
-    paddingHorizontal: 9
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "#ABEFC6"
+  },
+  walkStatusBadgeCompleted: {
+    borderRadius: 999,
+    backgroundColor: "#F4F3FF",
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderWidth: 1,
+    borderColor: "#D9D6FE"
   },
   walkStatusText: {
     color: "#067647",
