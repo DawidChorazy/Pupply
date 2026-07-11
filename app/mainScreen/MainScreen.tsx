@@ -55,7 +55,7 @@ export default function MainScreen() {
       <BottomMenu activeTab="home" />
     </View>
   );
-}
+}// 
 
 const screenStyles = StyleSheet.create({
   shell: {
