@@ -1,6 +1,6 @@
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useRegisterForm } from "@/features/auth/useRegisterForm";
 import { formatPolishDateInput } from "@/utils/input-masks";
-import { useRegisterForm } from "@/hooks/use-register-form";
 
 export default function RegisterScreen() {
   const {

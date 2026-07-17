@@ -2,14 +2,19 @@ import { ApiError } from "@/services/api-client";
 import { registerClinic, registerUser } from "@/services/auth-service";
 import { saveAuthTokens } from "@/services/auth-storage";
 import { useState } from "react";
-import { polishDateToIso } from "@/utils/input-masks";
-import { validateForm } from "@/utils/register-validation";
+import { validateForm } from "./validation";
 
 function normalizeBirthDate(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
 
-  return polishDateToIso(trimmed) ?? trimmed;
+  const match = /^([0-9]{2})\.([0-9]{2})\.([0-9]{4})$/.exec(trimmed);
+  if (match) {
+    const [, day, month, year] = match;
+    return `${year}-${month}-${day}`;
+  }
+
+  return trimmed;
 }
 
 function formatApiError(error: ApiError) {
@@ -91,7 +96,7 @@ export function useRegisterForm() {
               confirmPassword: form.confirmPassword
             });
 
-      await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
+      await saveAuthTokens(response.accessToken, response.refreshToken);
       setSuccess("Konto utworzone");
     } catch (e) {
       if (e instanceof ApiError) {

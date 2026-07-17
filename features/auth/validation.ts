@@ -1,5 +1,3 @@
-import { polishDateToIso } from "@/utils/input-masks";
-
 export function validateForm(form: any, type: "user" | "clinic") {
   if (!form.email.trim()) return "Email wymagany";
 
@@ -13,9 +11,13 @@ export function validateForm(form: any, type: "user" | "clinic") {
     return "Imię i nazwisko wymagane";
 
   if (type === "user" && form.birthDate.trim()) {
-    const isoDate = polishDateToIso(form.birthDate);
-    if (!isoDate) return "Podaj prawidłową datę urodzenia w formacie DD.MM.RRRR";
-    if (new Date(`${isoDate}T00:00:00`) > new Date()) return "Data urodzenia nie może być w przyszłości";
+    const value = form.birthDate.trim();
+    const isDotFormat = /^[0-9]{2}\.[0-9]{2}\.[0-9]{4}$/.test(value);
+    const isIsoFormat = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value);
+
+    if (!isDotFormat && !isIsoFormat) {
+      return "Data urodzenia musi mieć format DD.MM.RRRR";
+    }
   }
 
   if (type === "clinic") {

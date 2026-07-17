@@ -18,7 +18,7 @@ import { getAccessToken } from "@/services/auth-storage";
 import { deletePet, getPet, updatePet } from "@/services/pets-service";
 import { uploadPetPhoto } from "@/services/uploads-service";
 import { Pet, PetGender } from "@/types/pets";
-import { addDogStyles as styles } from "@/styles/main-screen";
+import { addDogStyles as styles } from "@/features/home/styles";
 import { DogBreedPicker } from "@/components/forms/dog-breed-picker";
 import { PetHealthEditor } from "@/components/forms/pet-health-editor";
 import { PetPhotoPicker } from "@/components/forms/pet-photo-picker";

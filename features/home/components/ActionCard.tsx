@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "@react-navigation/elements";
 import { TouchableOpacity, View } from "react-native";
-import { styles } from "@/styles/main-screen";
+import { styles } from "../styles";
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -20,10 +20,10 @@ export function ActionCard({
   buttonText,
   color,
   iconName = "paw",
-  onPress
+  onPress,
 }: ActionCardProps) {
   return (
-    <TouchableOpacity style={styles.actionCard} onPress={onPress}>
+    <TouchableOpacity style={styles.actionCard} activeOpacity={0.85} onPress={onPress}>
       <View style={[styles.actionIconBox, { backgroundColor: `${color}18` }]}>
         <MaterialCommunityIcons name={iconName} size={24} color={color} />
       </View>

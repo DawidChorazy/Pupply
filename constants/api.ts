@@ -23,10 +23,6 @@ function resolveFallbackApiUrl() {
       return "http://10.0.2.2:4000/api";
     }
 
-    if (Platform.OS !== "web" && host === "localhost") {
-      return "http://192.168.0.133:4000/api";
-    }
-
     return `http://${host}:4000/api`;
   }
 
