@@ -36,13 +36,14 @@ function getGoogleClientIdForPlatform() {
   return googleWebClientId;
 }
 
-export default function HomeScreen()  {
+type GoogleLoginButtonProps = {
+  disabled: boolean;
+  onError: (message: string) => void;
+  onSubmittingChange: (isSubmitting: boolean) => void;
+};
+
+function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLoginButtonProps) {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const googleClientIdConfigured = Boolean(getGoogleClientIdForPlatform());
   const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest({
     clientId: missingGoogleClientId,
@@ -52,47 +53,105 @@ export default function HomeScreen()  {
     redirectUri: googleRedirectUri,
     selectAccount: true
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!googleResponse) {
-      return;
-    }
+    if (!googleResponse) return;
 
     if (googleResponse.type === "success") {
       const idToken = googleResponse.params.id_token || googleResponse.authentication?.idToken;
 
       if (!idToken) {
-        setError("Google nie zwrocil tokenu logowania*");
-        setIsGoogleSubmitting(false);
+        onError("Google nie zwrócił tokenu logowania*");
+        setIsSubmitting(false);
+        onSubmittingChange(false);
         return;
       }
 
       loginWithGoogle({ idToken })
         .then(async (response) => {
-          await saveAuthTokens(response.accessToken, response.refreshToken);
-          router.replace('/mainScreen/MainScreen');
+          await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
+          router.replace("/mainScreen/MainScreen");
         })
         .catch((requestError) => {
           if (requestError instanceof ApiError) {
-            setError(requestError.message || "Logowanie Google nie powiodlo sie*");
+            onError(requestError.message || "Logowanie Google nie powiodło się*");
           } else {
-            const errorDetails = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : '';
-            setError(`Brak polaczenia z API${errorDetails}. URL: ${API_BASE_URL}`);
+            const details = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : "";
+            onError(`Brak połączenia z API${details}. URL: ${API_BASE_URL}`);
           }
         })
         .finally(() => {
-          setIsGoogleSubmitting(false);
+          setIsSubmitting(false);
+          onSubmittingChange(false);
         });
-
       return;
     }
 
     if (googleResponse.type === "error") {
-      setError(googleResponse.error?.message || "Logowanie Google nie powiodlo sie*");
+      onError(googleResponse.error?.message || "Logowanie Google nie powiodło się*");
+    }
+    setIsSubmitting(false);
+    onSubmittingChange(false);
+  }, [googleResponse, onError, onSubmittingChange, router]);
+
+  const handlePress = async () => {
+    if (!googleClientIdConfigured) {
+      onError("Brak konfiguracji Google Client ID dla tej platformy*");
+      return;
     }
 
-    setIsGoogleSubmitting(false);
-  }, [googleResponse, router]);
+    onError("");
+    setIsSubmitting(true);
+    onSubmittingChange(true);
+
+    try {
+      const result = await promptGoogleSignIn();
+      if (result.type !== "success") {
+        setIsSubmitting(false);
+        onSubmittingChange(false);
+      }
+    } catch (requestError) {
+      const details = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : "";
+      onError(`Logowanie Google nie powiodło się${details}`);
+      setIsSubmitting(false);
+      onSubmittingChange(false);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      style={styles.googleButton}
+      activeOpacity={0.8}
+      disabled={disabled || isSubmitting || !googleRequest}
+      onPress={handlePress}
+    >
+      {isSubmitting ? (
+        <ActivityIndicator color="#1F2937" />
+      ) : (
+        <>
+          <Ionicons name="logo-google" size={20} color="#1F2937" />
+          <Text style={styles.googleButtonText}>Zaloguj przez Google</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+export default function HomeScreen()  {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [googleAuthAllowed, setGoogleAuthAllowed] = useState(Platform.OS !== "web");
+
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      setGoogleAuthAllowed(typeof window !== "undefined" && window.isSecureContext);
+    }
+  }, []);
 
   const loginValidation = async () => {
       if (email.trim() === '' && password.trim() === '') {
@@ -111,7 +170,7 @@ export default function HomeScreen()  {
             password
           });
 
-          await saveAuthTokens(response.accessToken, response.refreshToken);
+          await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
           router.replace('/mainScreen/MainScreen');
         } catch (requestError) {
           if (requestError instanceof ApiError) {
@@ -125,28 +184,6 @@ export default function HomeScreen()  {
         }
       }
 
-  }
-
-  const googleLoginValidation = async () => {
-    if (!googleClientIdConfigured) {
-      setError("Brak konfiguracji Google Client ID dla tej platformy*");
-      return;
-    }
-
-    setError('');
-    setIsGoogleSubmitting(true);
-
-    try {
-      const result = await promptGoogleSignIn();
-
-      if (result.type !== "success") {
-        setIsGoogleSubmitting(false);
-      }
-    } catch (requestError) {
-      const errorDetails = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : '';
-      setError(`Logowanie Google nie powiodlo sie${errorDetails}`);
-      setIsGoogleSubmitting(false);
-    }
   }
 
   return (
@@ -183,21 +220,23 @@ export default function HomeScreen()  {
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-              <TouchableOpacity
-                style={styles.googleButton}
-                activeOpacity={0.8}
-                disabled={isSubmitting || isGoogleSubmitting || !googleRequest}
-                onPress={googleLoginValidation}
-              >
-                {isGoogleSubmitting ? (
-                  <ActivityIndicator color="#1F2937" />
-                ) : (
-                  <>
-                    <Ionicons name="logo-google" size={20} color="#1F2937" />
-                    <Text style={styles.googleButtonText}>Zaloguj przez Google</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {googleAuthAllowed ? (
+                <GoogleLoginButton
+                  disabled={isSubmitting}
+                  onError={setError}
+                  onSubmittingChange={setIsGoogleSubmitting}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={styles.googleButton}
+                  activeOpacity={0.8}
+                  disabled={isSubmitting}
+                  onPress={() => setError("Logowanie Google w przeglądarce wymaga HTTPS lub adresu localhost*")}
+                >
+                  <Ionicons name="logo-google" size={20} color="#1F2937" />
+                  <Text style={styles.googleButtonText}>Zaloguj przez Google</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity 
                 style={styles.loginButton}

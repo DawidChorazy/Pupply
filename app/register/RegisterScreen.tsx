@@ -1,5 +1,6 @@
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { useRegisterForm } from "./useRegisterForm";
+import { useRegisterForm } from "@/features/auth/useRegisterForm";
+import { formatPolishDateInput } from "@/utils/input-masks";
 
 export default function RegisterScreen() {
   const {
@@ -61,7 +62,9 @@ export default function RegisterScreen() {
                 style={styles.input}
                 placeholder="DD.MM.YYYY"
                 value={form.birthDate}
-                onChangeText={(t) => handleChange("birthDate", t)}
+                onChangeText={(t) => handleChange("birthDate", formatPolishDateInput(t))}
+                keyboardType="number-pad"
+                maxLength={10}
               />
             </>
           ) : (

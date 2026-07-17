@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,38 +14,41 @@ import {
 import { ApiError } from "@/services/api-client";
 import { getAccessToken } from "@/services/auth-storage";
 import { createPet } from "@/services/pets-service";
+import { uploadPetPhoto } from "@/services/uploads-service";
 import { PetGender } from "@/types/pets";
-import { addDogStyles as styles } from "./styles";
+import { addDogStyles as styles } from "@/features/home/styles";
+import { DogBreedPicker } from "@/components/forms/dog-breed-picker";
+import { PetHealthEditor } from "@/components/forms/pet-health-editor";
+import { PetPhotoPicker } from "@/components/forms/pet-photo-picker";
+import { PetIllnessRecord, serializePetAllergies, serializePetIllnesses } from "@/types/pet-health";
 
 type DogForm = {
-  photoUrl: string; // do zmiany będzie nie na zasadzie linku
+  photoUrl: string;
   name: string;
   age: string;
   breed: string;
   weight: string;
   gender: PetGender | "";
-  illnesses: string;
-  allergies: string;
   vaccines: string;
   vet: string;
   notes: string;
 };
 
 const initialForm: DogForm = {
-  photoUrl: "", // do zmiany nie na zasadzie linku
+  photoUrl: "",
   name: "",
   age: "",
   breed: "",
   weight: "",
   gender: "",
-  illnesses: "",
-  allergies: "",
   vaccines: "",
   vet: "",
   notes: ""
 };
 
-const genderOptions: Array<{ value: PetGender; label: string; icon: string }> = [
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
+
+const genderOptions: { value: PetGender; label: string; icon: IconName }[] = [
   { value: "MALE", label: "Samiec", icon: "gender-male" },
   { value: "FEMALE", label: "Samica", icon: "gender-female" }
 ];
@@ -75,6 +77,9 @@ export default function AddDogScreen() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingPhoto, setPendingPhoto] = useState<{ uri: string; contentType: "image/jpeg" | "image/png" | "image/webp" } | null>(null);
+  const [illnesses, setIllnesses] = useState<PetIllnessRecord[]>([]);
+  const [allergies, setAllergies] = useState<string[]>([]);
 
   const updateField = (field: keyof DogForm, value: string) => {
     setForm((currentForm) => ({
@@ -120,6 +125,9 @@ export default function AddDogScreen() {
     setIsSubmitting(true);
 
     try {
+      const photoKey = pendingPhoto
+        ? await uploadPetPhoto(pendingPhoto.uri, pendingPhoto.contentType)
+        : undefined;
       await createPet(
         {
           name: form.name.trim(),
@@ -127,9 +135,9 @@ export default function AddDogScreen() {
           age,
           breed: optionalText(form.breed),
           weight,
-          photoUrl: optionalText(form.photoUrl),
-          illnesses: optionalText(form.illnesses),
-          allergies: optionalText(form.allergies),
+          photoKey,
+          illnesses: serializePetIllnesses(illnesses),
+          allergies: serializePetAllergies(allergies),
           vaccines: optionalText(form.vaccines),
           vet: optionalText(form.vet),
           notes: optionalText(form.notes)
@@ -139,6 +147,9 @@ export default function AddDogScreen() {
 
       setSuccess("Zwierzak został dodany");
       setForm(initialForm);
+      setPendingPhoto(null);
+      setIllnesses([]);
+      setAllergies([]);
     } catch (requestError) {
       if (requestError instanceof ApiError) {
         setError(requestError.message || "Nie udało się dodać zwierzaka");
@@ -173,16 +184,14 @@ export default function AddDogScreen() {
           </View>
         </View>
 
-        <View style={styles.photoCard}>
-          {form.photoUrl.trim() ? (
-            <Image source={{ uri: form.photoUrl.trim() }} style={styles.photoPreview} />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <MaterialCommunityIcons name="camera-plus-outline" size={36} color="#D35400" />
-              <Text style={styles.photoTitle}>Dodaj zdjęcie</Text>
-            </View>
-          )}
-        </View>
+        <PetPhotoPicker
+          value={form.photoUrl}
+          onError={setError}
+          onSelected={(photo) => {
+            setPendingPhoto(photo);
+            updateField("photoUrl", photo.uri);
+          }}
+        />
 
         <View style={styles.formCard}>
           <Text style={styles.sectionTitle}>Podstawowe dane</Text>
@@ -214,13 +223,7 @@ export default function AddDogScreen() {
             />
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Rasa"
-            placeholderTextColor="#A98D7B"
-            value={form.breed}
-            onChangeText={(value) => updateField("breed", value)}
-          />
+          <DogBreedPicker value={form.breed} onChange={(value) => updateField("breed", value)} />
 
           <Text style={styles.fieldLabel}>Płeć</Text>
           <View style={styles.genderRow}>
@@ -257,24 +260,11 @@ export default function AddDogScreen() {
         <View style={styles.formCard}>
           <Text style={styles.sectionTitle}>Zdrowie i opieka</Text>
 
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Przebyte choroby"
-            placeholderTextColor="#A98D7B"
-            value={form.illnesses}
-            onChangeText={(value) => updateField("illnesses", value)}
-            multiline
-            textAlignVertical="top"
-          />
-
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Alergie i specjalne potrzeby"
-            placeholderTextColor="#A98D7B"
-            value={form.allergies}
-            onChangeText={(value) => updateField("allergies", value)}
-            multiline
-            textAlignVertical="top"
+          <PetHealthEditor
+            illnesses={illnesses}
+            onIllnessesChange={setIllnesses}
+            allergies={allergies}
+            onAllergiesChange={setAllergies}
           />
 
           <TextInput

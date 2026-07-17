@@ -17,52 +17,101 @@ enum PetGender {
   FEMALE
 }
 
+enum SitterServiceType {
+  DOG_WALK
+  DROP_IN
+  DAY_CARE
+}
+
+enum BookingStatus {
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum NotificationType {
+  BOOKING_REQUESTED
+  BOOKING_ACCEPTED
+  BOOKING_REJECTED
+  BOOKING_CANCELLED
+  BOOKING_COMPLETED
+}
+
+enum AccountTokenType {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+
 model Account {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  passwordHash  String?
-  googleId      String?        @unique
-  role          AccountRole
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  userProfile   UserProfile?
-  clinicProfile ClinicProfile?
-  refreshTokens RefreshToken[]
-  pets          Pet[]
+  id              String               @id @default(cuid())
+  email           String               @unique
+  passwordHash    String?
+  googleId        String?              @unique
+  role            AccountRole
+  emailVerifiedAt DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  userProfile     UserProfile?
+  clinicProfile   ClinicProfile?
+  refreshTokens   RefreshToken[]
+  actionTokens    AccountActionToken[]
+  pets            Pet[]
+  sitterProfile   SitterProfile?
+  ownedBookings   Booking[]            @relation("OwnerBookings")
+  sitterBookings  Booking[]            @relation("SitterBookings")
+  notifications   Notification[]
 }
 
 model UserProfile {
-  id        String   @id @default(cuid())
-  accountId String   @unique
+  id        String    @id @default(cuid())
+  accountId String    @unique
   fullName  String
   phone     String
   birthDate DateTime?
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
 model ClinicProfile {
-  id        String  @id @default(cuid())
-  accountId String  @unique
+  id         String  @id @default(cuid())
+  accountId  String  @unique
   clinicName String
-  nip       String  @unique
-  phone     String
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  nip        String  @unique
+  phone      String
+  account    Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
-  id        String   @id
+  id        String    @id
   accountId String
   tokenHash String
+  familyId  String
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([familyId])
+}
+
+model AccountActionToken {
+  id        String           @id @default(cuid())
+  accountId String
+  type      AccountTokenType
+  tokenHash String           @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+  account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, type])
+  @@index([expiresAt])
 }
 
 model Pet {
-  id        String     @id @default(cuid())
+  id        String    @id @default(cuid())
   accountId String
   name      String
   age       Int?
@@ -70,14 +119,106 @@ model Pet {
   weight    Float?
   gender    PetGender
   photoUrl  String?
+  photoKey  String?
   illnesses String?
   allergies String?
   vaccines  String?
   vet       String?
   notes     String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  bookings  Booking[]
 
   @@index([accountId])
+}
+
+model SitterProfile {
+  id              String             @id @default(cuid())
+  accountId       String             @unique
+  bio             String
+  city            String
+  latitude        Float
+  longitude       Float
+  serviceRadiusKm Int                @default(10)
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  account         Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  services        SitterService[]
+  availability    AvailabilitySlot[]
+
+  @@index([isActive, city])
+}
+
+model SitterService {
+  id              String            @id @default(cuid())
+  sitterProfileId String
+  type            SitterServiceType
+  durationMinutes Int
+  priceCents      Int
+  currency        String            @default("PLN")
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  sitterProfile   SitterProfile     @relation(fields: [sitterProfileId], references: [id], onDelete: Cascade)
+  bookings        Booking[]
+
+  @@unique([sitterProfileId, type, durationMinutes])
+  @@index([type, isActive])
+}
+
+model AvailabilitySlot {
+  id              String        @id @default(cuid())
+  sitterProfileId String
+  startsAt        DateTime
+  endsAt          DateTime
+  createdAt       DateTime      @default(now())
+  sitterProfile   SitterProfile @relation(fields: [sitterProfileId], references: [id], onDelete: Cascade)
+  bookings        Booking[]
+
+  @@unique([sitterProfileId, startsAt, endsAt])
+  @@index([sitterProfileId, startsAt])
+}
+
+model Booking {
+  id                 String           @id @default(cuid())
+  ownerAccountId     String
+  sitterAccountId    String
+  petId              String
+  sitterServiceId    String
+  availabilitySlotId String
+  status             BookingStatus    @default(REQUESTED)
+  activeSlotKey      String?          @unique
+  priceCents         Int
+  currency           String           @default("PLN")
+  note               String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  owner              Account          @relation("OwnerBookings", fields: [ownerAccountId], references: [id], onDelete: Cascade)
+  sitter             Account          @relation("SitterBookings", fields: [sitterAccountId], references: [id], onDelete: Cascade)
+  pet                Pet              @relation(fields: [petId], references: [id], onDelete: Restrict)
+  sitterService      SitterService    @relation(fields: [sitterServiceId], references: [id], onDelete: Restrict)
+  availabilitySlot   AvailabilitySlot @relation(fields: [availabilitySlotId], references: [id], onDelete: Restrict)
+  notifications      Notification[]
+
+  @@index([ownerAccountId, createdAt])
+  @@index([sitterAccountId, createdAt])
+  @@index([availabilitySlotId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  accountId String
+  bookingId String?
+  type      NotificationType
+  title     String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  booking   Booking?         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([accountId, readAt])
 }

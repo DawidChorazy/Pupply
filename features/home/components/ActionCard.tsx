@@ -11,6 +11,7 @@ type ActionCardProps = {
   buttonText: string;
   color: string;
   iconName?: IconName;
+  onPress?: () => void;
 };
 
 export function ActionCard({
@@ -19,9 +20,10 @@ export function ActionCard({
   buttonText,
   color,
   iconName = "paw",
+  onPress,
 }: ActionCardProps) {
   return (
-    <TouchableOpacity style={styles.actionCard}>
+    <TouchableOpacity style={styles.actionCard} activeOpacity={0.85} onPress={onPress}>
       <View style={[styles.actionIconBox, { backgroundColor: `${color}18` }]}>
         <MaterialCommunityIcons name={iconName} size={24} color={color} />
       </View>
