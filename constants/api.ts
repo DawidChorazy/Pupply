@@ -44,6 +44,10 @@ export const API_ENDPOINTS = {
     google: "/auth/google",
     login: "/auth/login",
     refresh: "/auth/refresh",
+    logout: "/auth/logout",
+    logoutAll: "/auth/logout-all",
+    passwordResetRequest: "/auth/password-reset/request",
+    passwordResetConfirm: "/auth/password-reset/confirm",
     registerUser: "/auth/register/user",
     registerClinic: "/auth/register/clinic"
   },
@@ -54,5 +58,26 @@ export const API_ENDPOINTS = {
   },
   users: {
     me: "/users/me"
+  },
+  sitters: {
+    list: "/sitters",
+    me: "/sitters/me",
+    availability: "/sitters/me/availability",
+    availabilityDetail: (slotId: string) => `/sitters/me/availability/${slotId}`
+  },
+  bookings: {
+    list: "/bookings",
+    create: "/bookings",
+    detail: (bookingId: string) => `/bookings/${bookingId}`,
+    status: (bookingId: string) => `/bookings/${bookingId}/status`
+  },
+  notifications: {
+    list: "/notifications",
+    unreadCount: "/notifications/unread-count",
+    read: (notificationId: string) => `/notifications/${notificationId}/read`,
+    readAll: "/notifications/read-all"
+  },
+  uploads: {
+    petPhoto: "/uploads/pet-photo"
   }
 } as const;

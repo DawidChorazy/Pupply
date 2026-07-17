@@ -1,11 +1,13 @@
-import { AccountRole } from "@prisma/client";
+import { AccountRole, AccountTokenType, Prisma } from "@prisma/client";
 import { OAuth2Client } from "google-auth-library";
 
 import { env } from "../config/env";
 import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
 import { hashPassword, verifyPassword } from "../utils/password";
+import { sendAccountActionEmail } from "./mail.service";
 import {
+  createOpaqueToken,
   createRefreshTokenId,
   hashToken,
   signAccessToken,
@@ -46,6 +48,7 @@ type AccountWithProfiles = {
   id: string;
   email: string;
   role: AccountRole;
+  emailVerifiedAt?: Date | null;
   userProfile: {
     id: string;
     fullName: string;
@@ -67,6 +70,7 @@ function mapAccount(account: AccountWithProfiles) {
     id: account.id,
     email: account.email,
     role: account.role,
+    emailVerifiedAt: account.emailVerifiedAt ?? null,
     profile:
       account.role === "USER"
         ? account.userProfile
@@ -88,16 +92,23 @@ function mapAccount(account: AccountWithProfiles) {
   };
 }
 
-async function issueTokenPair(accountId: string, role: AccountRole) {
+async function issueTokenPair(
+  accountId: string,
+  role: AccountRole,
+  options: { familyId?: string; client?: Prisma.TransactionClient } = {}
+) {
+  const client = options.client ?? prisma;
   const accessToken = signAccessToken(accountId, role);
   const refreshTokenId = createRefreshTokenId();
+  const familyId = options.familyId ?? createRefreshTokenId();
   const refreshToken = signRefreshToken(accountId, role, refreshTokenId);
 
-  await prisma.refreshToken.create({
+  await client.refreshToken.create({
     data: {
       id: refreshTokenId,
       accountId,
       tokenHash: hashToken(refreshToken),
+      familyId,
       expiresAt: new Date(Date.now() + env.JWT_REFRESH_TTL_DAYS * 24 * 60 * 60 * 1000)
     }
   });
@@ -295,7 +306,8 @@ export async function loginWithGoogle(input: GoogleLoginInput) {
         id: existingEmailAccount.id
       },
       data: {
-        googleId
+        googleId,
+        emailVerifiedAt: new Date()
       },
       include: {
         userProfile: true,
@@ -316,6 +328,7 @@ export async function loginWithGoogle(input: GoogleLoginInput) {
       email,
       googleId,
       passwordHash: null,
+      emailVerifiedAt: new Date(),
       role: "USER",
       userProfile: {
         create: {
@@ -339,7 +352,13 @@ export async function loginWithGoogle(input: GoogleLoginInput) {
 }
 
 export async function refreshSession(input: RefreshInput) {
-  const payload = verifyRefreshToken(input.refreshToken);
+  let payload: ReturnType<typeof verifyRefreshToken>;
+
+  try {
+    payload = verifyRefreshToken(input.refreshToken);
+  } catch (_error) {
+    throw new AppError(401, "Refresh token is invalid", "INVALID_REFRESH_TOKEN");
+  }
 
   const tokenRecord = await prisma.refreshToken.findUnique({
     where: {
@@ -355,48 +374,180 @@ export async function refreshSession(input: RefreshInput) {
     }
   });
 
-  if (!tokenRecord || tokenRecord.revokedAt) {
-    throw new AppError(401, "Refresh token is invalid", "INVALID_REFRESH_TOKEN");
-  }
-
-  if (tokenRecord.expiresAt.getTime() < Date.now()) {
-    throw new AppError(401, "Refresh token expired", "EXPIRED_REFRESH_TOKEN");
-  }
-
-  if (tokenRecord.accountId !== payload.accountId) {
+  if (!tokenRecord) {
     throw new AppError(401, "Refresh token is invalid", "INVALID_REFRESH_TOKEN");
   }
 
   const incomingTokenHash = hashToken(input.refreshToken);
 
-  if (incomingTokenHash !== tokenRecord.tokenHash) {
-    await prisma.refreshToken.update({
-      where: {
-        id: tokenRecord.id
-      },
-      data: {
-        revokedAt: new Date()
-      }
+  if (
+    tokenRecord.revokedAt ||
+    tokenRecord.accountId !== payload.accountId ||
+    incomingTokenHash !== tokenRecord.tokenHash
+  ) {
+    await prisma.refreshToken.updateMany({
+      where: { familyId: tokenRecord.familyId, revokedAt: null },
+      data: { revokedAt: new Date() }
     });
-
-    throw new AppError(401, "Refresh token is invalid", "INVALID_REFRESH_TOKEN");
+    throw new AppError(401, "Refresh token reuse detected", "REFRESH_TOKEN_REUSED");
   }
 
-  await prisma.refreshToken.update({
-    where: {
-      id: tokenRecord.id
-    },
-    data: {
-      revokedAt: new Date()
-    }
-  });
+  if (tokenRecord.expiresAt.getTime() < Date.now()) {
+    await prisma.refreshToken.updateMany({
+      where: { familyId: tokenRecord.familyId, revokedAt: null },
+      data: { revokedAt: new Date() }
+    });
+    throw new AppError(401, "Refresh token expired", "EXPIRED_REFRESH_TOKEN");
+  }
 
-  const tokens = await issueTokenPair(tokenRecord.account.id, tokenRecord.account.role);
+  let tokens: Awaited<ReturnType<typeof issueTokenPair>>;
+  try {
+    tokens = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.refreshToken.updateMany({
+        where: { id: tokenRecord.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+
+      if (claimed.count !== 1) {
+        throw new AppError(401, "Refresh token reuse detected", "REFRESH_TOKEN_REUSED");
+      }
+
+      return issueTokenPair(tokenRecord.account.id, tokenRecord.account.role, {
+        familyId: tokenRecord.familyId,
+        client: tx
+      });
+    });
+  } catch (error) {
+    if (error instanceof AppError && error.code === "REFRESH_TOKEN_REUSED") {
+      await prisma.refreshToken.updateMany({
+        where: { familyId: tokenRecord.familyId, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+    }
+    throw error;
+  }
 
   return {
     ...tokens,
     account: mapAccount(tokenRecord.account)
   };
+}
+
+export async function logout(input: RefreshInput) {
+  let payload: ReturnType<typeof verifyRefreshToken>;
+  try {
+    payload = verifyRefreshToken(input.refreshToken);
+  } catch (_error) {
+    return;
+  }
+  const token = await prisma.refreshToken.findUnique({ where: { id: payload.tokenId } });
+  if (token && token.accountId === payload.accountId) {
+    await prisma.refreshToken.updateMany({
+      where: { familyId: token.familyId, revokedAt: null },
+      data: { revokedAt: new Date() }
+    });
+  }
+}
+
+export async function logoutAll(accountId: string) {
+  await prisma.refreshToken.updateMany({
+    where: { accountId, revokedAt: null },
+    data: { revokedAt: new Date() }
+  });
+}
+
+async function createAccountActionToken(accountId: string, type: AccountTokenType) {
+  const token = createOpaqueToken();
+  const now = new Date();
+
+  await prisma.$transaction([
+    prisma.accountActionToken.updateMany({
+      where: { accountId, type, usedAt: null },
+      data: { usedAt: now }
+    }),
+    prisma.accountActionToken.create({
+      data: {
+        accountId,
+        type,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(now.getTime() + env.ACTION_TOKEN_TTL_MINUTES * 60 * 1000)
+      }
+    })
+  ]);
+
+  return token;
+}
+
+export async function requestPasswordReset(email: string) {
+  const account = await prisma.account.findUnique({ where: { email } });
+  if (!account || !account.passwordHash) return {};
+
+  const token = await createAccountActionToken(account.id, "PASSWORD_RESET");
+  await sendAccountActionEmail(account.email, "password-reset", token);
+  return env.NODE_ENV === "production" ? {} : { debugToken: token };
+}
+
+export async function resetPassword(token: string, password: string) {
+  const tokenHash = hashToken(token);
+  const record = await prisma.accountActionToken.findUnique({ where: { tokenHash } });
+
+  if (
+    !record ||
+    record.type !== "PASSWORD_RESET" ||
+    record.usedAt ||
+    record.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new AppError(400, "Password reset token is invalid or expired", "INVALID_ACTION_TOKEN");
+  }
+
+  const passwordHash = await hashPassword(password);
+  await prisma.$transaction(async (tx) => {
+    const consumed = await tx.accountActionToken.updateMany({
+      where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() }
+    });
+    if (consumed.count !== 1) {
+      throw new AppError(400, "Password reset token is invalid or expired", "INVALID_ACTION_TOKEN");
+    }
+    await tx.account.update({ where: { id: record.accountId }, data: { passwordHash } });
+    await tx.refreshToken.updateMany({
+      where: { accountId: record.accountId, revokedAt: null },
+      data: { revokedAt: new Date() }
+    });
+  });
+}
+
+export async function requestEmailVerification(accountId: string) {
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!account) throw new AppError(404, "Account was not found", "ACCOUNT_NOT_FOUND");
+  if (account.emailVerifiedAt) return {};
+
+  const token = await createAccountActionToken(account.id, "EMAIL_VERIFICATION");
+  await sendAccountActionEmail(account.email, "email-verification", token);
+  return env.NODE_ENV === "production" ? {} : { debugToken: token };
+}
+
+export async function confirmEmailVerification(token: string) {
+  const record = await prisma.accountActionToken.findUnique({ where: { tokenHash: hashToken(token) } });
+  if (
+    !record ||
+    record.type !== "EMAIL_VERIFICATION" ||
+    record.usedAt ||
+    record.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new AppError(400, "Verification token is invalid or expired", "INVALID_ACTION_TOKEN");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const consumed = await tx.accountActionToken.updateMany({
+      where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() }
+    });
+    if (consumed.count !== 1) {
+      throw new AppError(400, "Verification token is invalid or expired", "INVALID_ACTION_TOKEN");
+    }
+    await tx.account.update({ where: { id: record.accountId }, data: { emailVerifiedAt: new Date() } });
+  });
 }
 
 export async function getCurrentUserProfile(accountId: string) {

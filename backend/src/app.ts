@@ -1,15 +1,20 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import morgan from "morgan";
 import swaggerUi from "swagger-ui-express";
 
 import { env } from "./config/env";
+import { prisma } from "./config/prisma";
 import { openApiSpec } from "./docs/openapi";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
+import { requestContext } from "./middleware/request-context";
 import { apiRouter } from "./routes";
 
 const app = express();
+
+if (env.TRUST_PROXY_HOPS > 0) {
+  app.set("trust proxy", env.TRUST_PROXY_HOPS);
+}
 
 const configuredOrigins = env.CORS_ORIGIN.split(",")
   .map((origin) => origin.trim())
@@ -28,14 +33,14 @@ const corsOrigin: cors.CorsOptions["origin"] =
       };
 
 app.use(helmet());
+app.use(requestContext);
 app.use(
   cors({
     origin: corsOrigin,
     credentials: true
   })
 );
-app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 app.get("/", (_req, res) => {
   res.status(200).json({
@@ -63,6 +68,19 @@ app.get("/api/health", (_req, res) => {
   res.status(200).json({
     status: "ok"
   });
+});
+
+app.get("/api/ready", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.status(200).json({ status: "ready" });
+  } catch (_error) {
+    res.status(503).json({
+      error: "DATABASE_UNAVAILABLE",
+      message: "Database is not ready",
+      requestId: req.requestId
+    });
+  }
 });
 
 app.get("/openapi.json", (_req, res) => {

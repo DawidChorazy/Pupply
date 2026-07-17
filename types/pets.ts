@@ -6,7 +6,7 @@ export interface CreatePetPayload {
   breed?: string;
   weight?: number;
   gender: PetGender;
-  photoUrl?: string;
+  photoKey?: string;
   illnesses?: string;
   allergies?: string;
   vaccines?: string;
@@ -20,7 +20,7 @@ export interface UpdatePetPayload {
   breed?: string;
   weight?: number;
   gender?: PetGender;
-  photoUrl?: string;
+  photoKey?: string;
   illnesses?: string;
   allergies?: string;
   vaccines?: string;
@@ -37,6 +37,7 @@ export interface Pet {
   weight: number | null;
   gender: PetGender;
   photoUrl: string | null;
+  photoKey: string | null;
   illnesses: string | null;
   allergies: string | null;
   vaccines: string | null;

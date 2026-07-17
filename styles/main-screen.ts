@@ -46,6 +46,23 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 3
   },
+  notificationBadge: {
+    position: "absolute",
+    right: -4,
+    top: -4,
+    minWidth: 19,
+    height: 19,
+    borderRadius: 10,
+    backgroundColor: "#B42318",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4
+  },
+  notificationBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "800"
+  },
 
   quickActionsRow: {
     flexDirection: "row",
@@ -183,9 +200,9 @@ export const styles = StyleSheet.create({
     borderBottomWidth: 0
   },
   petAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#FFF0D2",
     alignItems: "center",
     justifyContent: "center",
@@ -219,6 +236,28 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 14
+  },
+  walksIconCircleSmall: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#FFF0D2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    overflow: "hidden"
+  },
+  petAvatarImage: {
+    width: "100%",
+    height: "100%"
+  },
+  bookingPreview: {
+    minHeight: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F2E4D8",
+    paddingVertical: 8
   },
   secondaryButton: {
     marginTop: 16,

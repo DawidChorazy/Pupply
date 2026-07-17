@@ -3,12 +3,13 @@ import { Text } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { useFocusEffect } from "@react-navigation/native";
 import { ApiError } from "@/services/api-client";
 import { getAccessToken } from "@/services/auth-storage";
 import { listPets } from "@/services/pets-service";
 import { Pet } from "@/types/pets";
-import { styles } from "../styles";
+import { styles } from "@/styles/main-screen";
 
 type DogsCardProps = {
   onAddDog?: () => void;
@@ -99,7 +100,11 @@ export function DogsCard({ onAddDog }: DogsCardProps) {
                 onPress={() => handleOpenPet(pet.id)}
               >
                 <View style={styles.petAvatar}>
-                  <MaterialCommunityIcons name="paw" size={18} color="#D35400" />
+                  {pet.photoUrl ? (
+                    <Image source={{ uri: pet.photoUrl }} style={styles.petAvatarImage} contentFit="cover" transition={150} />
+                  ) : (
+                    <MaterialCommunityIcons name="paw" size={18} color="#D35400" />
+                  )}
                 </View>
 
                 <View style={styles.petInfo}>

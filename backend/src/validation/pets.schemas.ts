@@ -18,9 +18,9 @@ export const createPetSchema = z.object({
   breed: optionalText(80),
   weight: optionalNumber(z.coerce.number().min(0).max(200)),
   gender: z.enum(["MALE", "FEMALE"]),
-  photoUrl: optionalText(300),
-  illnesses: optionalText(500),
-  allergies: optionalText(500),
+  photoKey: optionalText(500),
+  illnesses: optionalText(10_000),
+  allergies: optionalText(5_000),
   vaccines: optionalText(500),
   vet: optionalText(200),
   notes: optionalText(1000)

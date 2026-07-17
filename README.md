@@ -1,6 +1,6 @@
 # Pupply
 
-Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend API dla auth i profilu uzytkownika.
+Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend marketplace opieki nad zwierzetami.
 
 ## Stack
 
@@ -8,6 +8,7 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend API dla auth i pr
 - Backend: Node.js + Express + TypeScript
 - Baza danych: PostgreSQL + Prisma ORM
 - Auth: JWT access token + refresh token
+- Pliki: S3-compatible storage (lokalnie MinIO)
 
 ## Co jest zaimplementowane
 
@@ -16,7 +17,12 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend API dla auth i pr
 - Logowanie: POST /api/auth/login
 - Odswiezanie sesji: POST /api/auth/refresh
 - Profil zalogowanego uzytkownika: GET /api/users/me
+- Profile opiekunow, uslugi i dostepnosc: /api/sitters
+- Rezerwacje spacerow i opieki: /api/bookings
+- Powiadomienia: /api/notifications
+- Podpisane uploady zdjec: POST /api/uploads/pet-photo
 - Healthcheck backendu: GET /api/health
+- Readiness bazy: GET /api/ready
 - Swagger UI: GET /docs
 - OpenAPI JSON: GET /openapi.json
 
@@ -42,6 +48,8 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend API dla auth i pr
 - Skopiuj backend/.env.example do backend/.env
 - Ustaw DATABASE_URL pod lokalna baze PostgreSQL
 - Ustaw JWT_ACCESS_SECRET i JWT_REFRESH_SECRET (min. 32 znaki)
+- Dla zdjec ustaw S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID i S3_SECRET_ACCESS_KEY
+- Dla e-maili resetu hasla ustaw SMTP_HOST oraz dane SMTP; w development link jest wypisywany w logu
 
 ## Pierwsze uruchomienie
 
@@ -54,7 +62,7 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend API dla auth i pr
 3. Generowanie klienta Prisma
 - npm run backend:prisma:generate
 
-4. Uruchom PostgreSQL (jesli nie masz lokalnej instancji)
+4. Uruchom PostgreSQL i MinIO (jesli nie masz lokalnych instancji)
 - npm run db:up
 
 5. Migracje bazy
@@ -70,6 +78,13 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend API dla auth i pr
 
 - Otworz Swagger UI: http://localhost:4000/docs
 - Surowa specyfikacja OpenAPI: http://localhost:4000/openapi.json
+- Konsola MinIO: http://localhost:9001 (lokalnie minioadmin/minioadmin)
+
+## Testy backendu
+
+- Utworz osobna baze testowa zgodnie z backend/.env.test.example
+- Zastosuj migracje do tej bazy
+- Uruchom: npm --prefix backend test
 
 ## Troubleshooting
 
@@ -88,9 +103,9 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend API dla auth i pr
 - Po sukcesie access/refresh token zapisywane sa lokalnie
 - Po zalogowaniu lub rejestracji aplikacja przechodzi do sekcji tabs
 
-## Dalsze kroki
+## Poza zakresem obecnego MVP
 
-- Dodac route guard (blokada tabs dla niezalogowanych)
-- Dodac endpoint wylogowania i blacklist/revocation policy
-- Dodac reset hasla i weryfikacje email
-- Dodac testy integracyjne endpointow
+- Platnosci online
+- Czat i powiadomienia push
+- Oceny opiekunow
+- Pelny modul obslugi klinik

@@ -9,7 +9,7 @@ import {
   RegisterUserPayload
 } from "@/types/auth";
 
-import { apiRequest } from "./api-client";
+import { apiRequest, authenticatedApiRequest } from "./api-client";
 
 export function loginUser(payload: LoginPayload) {
   return apiRequest<AuthResponse>(API_ENDPOINTS.auth.login, {
@@ -51,4 +51,16 @@ export function getMyProfile(accessToken: string) {
     method: "GET",
     token: accessToken
   });
+}
+
+export function logout(refreshToken: string) {
+  return apiRequest<void>(API_ENDPOINTS.auth.logout, {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
+    skipAuthRefresh: true
+  });
+}
+
+export function logoutAll() {
+  return authenticatedApiRequest<void>(API_ENDPOINTS.auth.logoutAll, { method: "POST" });
 }

@@ -4,6 +4,7 @@ export interface AuthAccount {
   id: string;
   email: string;
   role: AccountRole;
+  emailVerifiedAt?: string | null;
   profile: Record<string, unknown> | null;
 }
 
@@ -51,5 +52,6 @@ export interface ProfileResponse {
     fullName: string;
     phone: string;
     birthDate: string | null;
+    emailVerifiedAt?: string | null;
   };
 }
