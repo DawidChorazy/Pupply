@@ -1,0 +1,13 @@
+.git
+.github
+.expo
+.env
+.env.*
+!.env.example
+node_modules
+backend
+dist
+web-build
+npm-debug.log*
+Dockerfile*
+docker-compose*.yml

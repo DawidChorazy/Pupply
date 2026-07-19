@@ -32,47 +32,64 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend marketplace opiek
 - backend/ - backend API
 - backend/prisma/schema.prisma - model danych
 
-## Wymagania
+## Szybki start przez Docker
 
-- Node.js 20+
-- npm 10+
-- lokalna instancja PostgreSQL lub Docker Desktop
+Wymagany jest Docker Desktop lub Docker Engine z Compose v2. Całą aplikację uruchamia jedno polecenie:
 
-## Konfiguracja ENV
+```bash
+docker compose up --build
+```
 
-1. Frontend
-- Skopiuj plik .env.example do .env.local
-- Ustaw EXPO_PUBLIC_API_URL pod adres backendu, np. http://localhost:4000/api
+Podman również jest obsługiwany po zainstalowaniu providera `podman-compose`; odpowiednikiem polecenia jest `podman compose up --build`.
 
-2. Backend
-- Skopiuj backend/.env.example do backend/.env
-- Ustaw DATABASE_URL pod lokalna baze PostgreSQL
-- Ustaw JWT_ACCESS_SECRET i JWT_REFRESH_SECRET (min. 32 znaki)
-- Dla zdjec ustaw S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID i S3_SECRET_ACCESS_KEY
-- Dla e-maili resetu hasla ustaw SMTP_HOST oraz dane SMTP; w development link jest wypisywany w logu
+Compose automatycznie:
 
-## Pierwsze uruchomienie
+- buduje frontend i backend,
+- uruchamia PostgreSQL oraz MinIO,
+- tworzy bucket `pupply`,
+- wykonuje migracje Prisma,
+- uruchamia API dopiero po uzyskaniu gotowości bazy,
+- monitoruje gotowość API i frontendu przez healthchecki.
 
-1. Instalacja zaleznosci frontendu
-- npm install
+Po starcie dostępne są:
 
-2. Instalacja zaleznosci backendu
-- npm --prefix backend install
+- aplikacja: http://localhost:8081
+- backend: http://localhost:4000/api/ready
+- Swagger UI: http://localhost:4000/docs
+- panel MinIO: http://localhost:9001
 
-3. Generowanie klienta Prisma
-- npm run backend:prisma:generate
+Zatrzymanie aplikacji:
 
-4. Uruchom PostgreSQL i MinIO (jesli nie masz lokalnych instancji)
-- npm run db:up
+```bash
+docker compose down
+```
 
-5. Migracje bazy
-- npm run backend:prisma:migrate
+Dane PostgreSQL i MinIO pozostają w nazwanych wolumenach. Polecenie `docker compose down -v` usuwa również te dane.
 
-6. Uruchom backend
-- npm run backend:dev
+Domyślna konfiguracja jest przeznaczona do lokalnego uruchomienia i nie wymaga plików ENV. Własne wartości można umieścić w pliku `.env` obok `docker-compose.yml`. Przykładowo, dla dostępu z innego urządzenia w sieci LAN:
 
-7. Uruchom frontend (w drugim terminalu)
-- npm start
+```dotenv
+EXPO_PUBLIC_API_URL=http://192.168.1.10:4000/api
+APP_PUBLIC_URL=http://192.168.1.10:8081
+API_PUBLIC_URL=http://192.168.1.10:4000
+CORS_ORIGIN=http://192.168.1.10:8081
+S3_PUBLIC_ENDPOINT=http://192.168.1.10:9000
+S3_PUBLIC_BASE_URL=http://192.168.1.10:9000/pupply
+```
+
+Po zmianie `EXPO_PUBLIC_*` trzeba ponownie wykonać `docker compose up --build`, ponieważ te wartości są osadzane w webowym bundle podczas budowania. Domyślne sekrety JWT i dane MinIO nadają się wyłącznie do lokalnego developmentu; przed publicznym wdrożeniem należy je nadpisać.
+
+## Uruchomienie bez konteneryzowania aplikacji
+
+Wymagane są Node.js 20+, npm 10+ oraz Docker dla PostgreSQL i MinIO.
+
+1. Skopiuj `.env.example` do `.env.local` oraz `backend/.env.example` do `backend/.env`.
+2. Zainstaluj zależności: `npm install` oraz `npm --prefix backend install`.
+3. Uruchom infrastrukturę: `npm run db:up`.
+4. Wykonaj `npm run backend:prisma:generate` i `npm run backend:prisma:migrate`.
+5. Uruchom frontend i backend: `npm start`.
+
+W trybie lokalnym `S3_ENDPOINT` służy backendowi do komunikacji z MinIO, natomiast `S3_PUBLIC_ENDPOINT` jest adresem używanym w podpisanych URL-ach wysyłanych do przeglądarki.
 
 ## Podglad API w UI
 
@@ -88,6 +105,10 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend marketplace opiek
 
 ## Troubleshooting
 
+- Port jest już zajęty
+	- Zatrzymaj wcześniejszą instancję albo ustaw odpowiedni port w `.env`, np. `FRONTEND_PORT=8082`
+- Zmiana `EXPO_PUBLIC_API_URL` nie pojawia się w aplikacji Docker
+	- Przebuduj obraz poleceniem `docker compose up --build`
 - Blad Prisma P1012: Environment variable not found DATABASE_URL
 	- Upewnij sie, ze istnieje plik backend/.env i zawiera DATABASE_URL
 - Blad Prisma P1001: Can't reach database server at localhost:5432

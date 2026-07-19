@@ -15,16 +15,23 @@ const storageConfigured = Boolean(
   env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
 );
 
-const client = storageConfigured
-  ? new S3Client({
-      endpoint: env.S3_ENDPOINT,
+const storageClientOptions = storageConfigured
+  ? {
       region: env.S3_REGION,
       forcePathStyle: env.S3_FORCE_PATH_STYLE,
       credentials: {
         accessKeyId: env.S3_ACCESS_KEY_ID!,
         secretAccessKey: env.S3_SECRET_ACCESS_KEY!
       }
-    })
+    }
+  : null;
+
+const client = storageClientOptions
+  ? new S3Client({ ...storageClientOptions, endpoint: env.S3_ENDPOINT })
+  : null;
+
+const uploadClient = storageClientOptions
+  ? new S3Client({ ...storageClientOptions, endpoint: env.S3_PUBLIC_ENDPOINT ?? env.S3_ENDPOINT })
   : null;
 
 function getStorage() {
@@ -46,10 +53,13 @@ export async function createPetPhotoUpload(accountId: string, contentType: strin
   if (sizeBytes > env.PET_PHOTO_MAX_BYTES) {
     throw new AppError(413, "Pet photo is too large", "PHOTO_TOO_LARGE");
   }
-  const { client: s3, bucket } = getStorage();
+  const { bucket } = getStorage();
+  if (!uploadClient) {
+    throw new AppError(503, "Object storage is not configured", "STORAGE_NOT_CONFIGURED");
+  }
   const photoKey = `pets/${accountId}/${crypto.randomUUID()}.${extension}`;
   const uploadUrl = await getSignedUrl(
-    s3,
+    uploadClient,
     new PutObjectCommand({ Bucket: bucket, Key: photoKey, ContentType: contentType, ContentLength: sizeBytes }),
     { expiresIn: 600 }
   );
