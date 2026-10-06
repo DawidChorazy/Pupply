@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from "react-native";

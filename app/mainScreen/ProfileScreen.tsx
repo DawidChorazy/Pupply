@@ -1,6 +1,6 @@
 import { BottomMenu } from "@/features/navigation/BottomMenu";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { ScrollView, StyleSheet, View } from "react-native";
 
 export default function ProfileScreen() {
