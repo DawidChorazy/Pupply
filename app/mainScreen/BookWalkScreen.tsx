@@ -3,7 +3,7 @@ import { getCaregiverById } from "@/features/walks/mockData";
 import { useWalksList } from "@/features/walks/useWalksList";
 import { usePetsList } from "@/features/pets/usePetsList";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import {

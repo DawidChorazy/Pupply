@@ -1,5 +1,5 @@
 import { useWalksContext } from "@/features/walks/WalksContext";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { useCallback } from "react";
 
 export function useWalksList() {

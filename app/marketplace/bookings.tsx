@@ -1,6 +1,5 @@
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, Text } from "expo-router/react-navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, TouchableOpacity, View } from "react-native";
