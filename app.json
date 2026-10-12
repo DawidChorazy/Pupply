@@ -28,9 +28,15 @@
     "plugins": [
       "expo-router",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Petify potrzebuje Twojej lokalizacji, aby znaleźć opiekunów w pobliżu. Możesz też wpisać miejscowość ręcznie."
+        }
+      ],
+      [
         "expo-image-picker",
         {
-          "photosPermission": "Pupply potrzebuje dostępu do zdjęć, aby dodać fotografię pupila."
+          "photosPermission": "Petify potrzebuje dostępu do zdjęć, aby dodać fotografię pupila lub zdjęcie opiekuna."
         }
       ],
       [

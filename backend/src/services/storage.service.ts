@@ -47,7 +47,7 @@ const extensions: Record<string, string> = {
   "image/webp": "webp"
 };
 
-export async function createPetPhotoUpload(accountId: string, contentType: string, sizeBytes: number) {
+async function createPhotoUpload(accountId: string, contentType: string, sizeBytes: number, purpose: "pets" | "sitters") {
   const extension = extensions[contentType];
   if (!extension) throw new AppError(400, "Unsupported image type", "UNSUPPORTED_MEDIA_TYPE");
   if (sizeBytes > env.PET_PHOTO_MAX_BYTES) {
@@ -57,7 +57,7 @@ export async function createPetPhotoUpload(accountId: string, contentType: strin
   if (!uploadClient) {
     throw new AppError(503, "Object storage is not configured", "STORAGE_NOT_CONFIGURED");
   }
-  const photoKey = `pets/${accountId}/${crypto.randomUUID()}.${extension}`;
+  const photoKey = `${purpose}/${accountId}/${crypto.randomUUID()}.${extension}`;
   const uploadUrl = await getSignedUrl(
     uploadClient,
     new PutObjectCommand({ Bucket: bucket, Key: photoKey, ContentType: contentType, ContentLength: sizeBytes }),
@@ -66,14 +66,22 @@ export async function createPetPhotoUpload(accountId: string, contentType: strin
   return { uploadUrl, photoKey, expiresIn: 600 };
 }
 
-export function assertOwnedPhotoKey(accountId: string, photoKey: string) {
-  if (!photoKey.startsWith(`pets/${accountId}/`) || photoKey.includes("..")) {
+export function createPetPhotoUpload(accountId: string, contentType: string, sizeBytes: number) {
+  return createPhotoUpload(accountId, contentType, sizeBytes, "pets");
+}
+
+export function createSitterPhotoUpload(accountId: string, contentType: string, sizeBytes: number) {
+  return createPhotoUpload(accountId, contentType, sizeBytes, "sitters");
+}
+
+export function assertOwnedPhotoKey(accountId: string, photoKey: string, purpose: "pets" | "sitters" = "pets") {
+  if (!photoKey.startsWith(`${purpose}/${accountId}/`) || photoKey.includes("..")) {
     throw new AppError(403, "Photo does not belong to this account", "FORBIDDEN");
   }
 }
 
-export async function assertPhotoExists(accountId: string, photoKey: string) {
-  assertOwnedPhotoKey(accountId, photoKey);
+export async function assertPhotoExists(accountId: string, photoKey: string, purpose: "pets" | "sitters" = "pets") {
+  assertOwnedPhotoKey(accountId, photoKey, purpose);
   const { client: s3, bucket } = getStorage();
   try {
     await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: photoKey }));

@@ -33,6 +33,9 @@ export interface SitterProfile {
   accountId: string;
   bio: string;
   city: string;
+  region: string | null;
+  photoKey: string | null;
+  photoUrl: string | null;
   latitude: number;
   longitude: number;
   serviceRadiusKm: number;
@@ -48,6 +51,8 @@ export interface SitterSearchItem {
   displayName: string;
   bio: string;
   city: string;
+  region: string | null;
+  photoUrl: string | null;
   serviceRadiusKm: number;
   distanceKm: number;
   services: SitterService[];
@@ -64,6 +69,8 @@ export interface SitterServiceInput {
 export interface CreateSitterProfilePayload {
   bio: string;
   city: string;
+  region?: string | null;
+  photoKey?: string | null;
   latitude: number;
   longitude: number;
   serviceRadiusKm: number;

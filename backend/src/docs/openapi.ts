@@ -150,6 +150,13 @@ export const openApiSpec = {
         responses: { "201": jsonResponse("Signed upload; PUT must use the declared Content-Type and Content-Length", { $ref: "#/components/schemas/UploadResponse" }), "413": jsonResponse("Photo too large", { $ref: "#/components/schemas/Error" }), "503": { $ref: "#/components/responses/StorageUnavailable" }, ...standardErrors }
       }
     },
+    "/api/uploads/sitter-photo": {
+      post: {
+        tags: ["Uploads"], summary: "Create signed sitter profile photo upload", security: bearer,
+        requestBody: jsonBody({ type: "object", required: ["contentType", "sizeBytes"], properties: { contentType: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] }, sizeBytes: { type: "integer", minimum: 1 } } }),
+        responses: { "201": jsonResponse("Signed upload; photoKey is owned by the authenticated sitter", { $ref: "#/components/schemas/UploadResponse" }), "413": jsonResponse("Photo too large", { $ref: "#/components/schemas/Error" }), "503": { $ref: "#/components/responses/StorageUnavailable" }, ...standardErrors }
+      }
+    },
     "/api/sitters": {
       get: {
         tags: ["Sitters"], summary: "Search active sitters",
@@ -254,10 +261,10 @@ export const openApiSpec = {
       UploadResponse: { type: "object", required: ["uploadUrl", "photoKey", "expiresIn"], properties: { uploadUrl: { type: "string", format: "uri" }, photoKey: { type: "string" }, expiresIn: { type: "integer" } } },
       ServiceType: { type: "string", enum: ["DOG_WALK", "DROP_IN", "DAY_CARE"] },
       SitterServiceInput: { type: "object", required: ["type", "durationMinutes", "priceCents"], properties: { type: { $ref: "#/components/schemas/ServiceType" }, durationMinutes: { type: "integer", minimum: 15 }, priceCents: { type: "integer", minimum: 0 }, isActive: { type: "boolean" } } },
-      SitterProfileInput: { type: "object", properties: { bio: { type: "string" }, city: { type: "string" }, latitude: { type: "number" }, longitude: { type: "number" }, serviceRadiusKm: { type: "integer" }, isActive: { type: "boolean" }, services: { type: "array", items: { $ref: "#/components/schemas/SitterServiceInput" } } } },
+      SitterProfileInput: { type: "object", properties: { bio: { type: "string" }, city: { type: "string" }, region: { type: "string", nullable: true }, photoKey: { type: "string", nullable: true, description: "Owned, uploaded sitter photo key. Null removes the photo." }, latitude: { type: "number" }, longitude: { type: "number" }, serviceRadiusKm: { type: "integer" }, isActive: { type: "boolean" }, services: { type: "array", minItems: 1, maxItems: 20, description: "Each type/duration pair must be unique; omitted previous variants become inactive.", items: { $ref: "#/components/schemas/SitterServiceInput" } } } },
       SitterService: { allOf: [{ $ref: "#/components/schemas/SitterServiceInput" }, { type: "object", required: ["id", "currency"], properties: { id: { type: "string" }, sitterProfileId: { type: "string" }, currency: { type: "string", enum: ["PLN"] } } }] },
       AvailabilitySlot: { type: "object", required: ["id", "startsAt", "endsAt"], properties: { id: { type: "string" }, sitterProfileId: { type: "string" }, startsAt: { type: "string", format: "date-time" }, endsAt: { type: "string", format: "date-time" } } },
-      SitterSearchItem: { type: "object", required: ["id", "displayName", "bio", "city", "distanceKm", "services", "availability"], properties: { id: { type: "string" }, displayName: { type: "string" }, bio: { type: "string" }, city: { type: "string" }, serviceRadiusKm: { type: "integer" }, distanceKm: { type: "number" }, services: { type: "array", items: { $ref: "#/components/schemas/SitterService" } }, availability: { type: "array", description: "Future, currently unbooked slots. Exact sitter coordinates are intentionally omitted.", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } },
+      SitterSearchItem: { type: "object", required: ["id", "displayName", "bio", "city", "distanceKm", "services", "availability"], properties: { id: { type: "string" }, displayName: { type: "string" }, bio: { type: "string" }, city: { type: "string" }, region: { type: "string", nullable: true }, photoUrl: { type: "string", format: "uri", nullable: true }, serviceRadiusKm: { type: "integer" }, distanceKm: { type: "number" }, services: { type: "array", items: { $ref: "#/components/schemas/SitterService" } }, availability: { type: "array", description: "Future, currently unbooked slots. Exact sitter coordinates are intentionally omitted.", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } },
       PaginatedSitters: { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/SitterSearchItem" } }, pagination: { $ref: "#/components/schemas/Pagination" } } },
       BookingStatus: { type: "string", enum: ["REQUESTED", "ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED"] },
       BookingRequest: { type: "object", required: ["petId", "sitterServiceId", "availabilitySlotId"], properties: { petId: { type: "string" }, sitterServiceId: { type: "string" }, availabilitySlotId: { type: "string" }, note: { type: "string" } } },

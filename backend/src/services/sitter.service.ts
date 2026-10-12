@@ -2,6 +2,7 @@ import { AccountRole, Prisma, SitterServiceType } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
+import { assertPhotoExists, getPetPhotoUrl } from "./storage.service";
 
 type ServiceInput = {
   type: SitterServiceType;
@@ -13,6 +14,8 @@ type ServiceInput = {
 type ProfileInput = {
   bio: string;
   city: string;
+  region?: string | null;
+  photoKey?: string | null;
   latitude: number;
   longitude: number;
   serviceRadiusKm: number;
@@ -33,11 +36,14 @@ export async function createSitterProfile(accountId: string, role: AccountRole, 
   requireUser(role);
   const existing = await prisma.sitterProfile.findUnique({ where: { accountId } });
   if (existing) throw new AppError(409, "Sitter profile already exists", "SITTER_PROFILE_EXISTS");
-  return prisma.sitterProfile.create({
+  if (input.photoKey) await assertPhotoExists(accountId, input.photoKey, "sitters");
+  const profile = await prisma.sitterProfile.create({
     data: {
       accountId,
       bio: input.bio,
       city: input.city,
+      region: input.region,
+      photoKey: input.photoKey,
       latitude: input.latitude,
       longitude: input.longitude,
       serviceRadiusKm: input.serviceRadiusKm,
@@ -48,13 +54,14 @@ export async function createSitterProfile(accountId: string, role: AccountRole, 
     },
     include: ownInclude
   });
+  return { ...profile, photoUrl: await getPetPhotoUrl(profile.photoKey) };
 }
 
 export async function getOwnSitterProfile(accountId: string, role: AccountRole) {
   requireUser(role);
   const profile = await prisma.sitterProfile.findUnique({ where: { accountId }, include: ownInclude });
   if (!profile) throw new AppError(404, "Sitter profile was not found", "SITTER_NOT_FOUND");
-  return profile;
+  return { ...profile, photoUrl: await getPetPhotoUrl(profile.photoKey) };
 }
 
 export async function updateSitterProfile(
@@ -66,6 +73,7 @@ export async function updateSitterProfile(
   const profile = await prisma.sitterProfile.findUnique({ where: { accountId } });
   if (!profile) throw new AppError(404, "Sitter profile was not found", "SITTER_NOT_FOUND");
 
+  if (input.photoKey) await assertPhotoExists(accountId, input.photoKey, "sitters");
   const { services, ...profileData } = input;
   await prisma.$transaction(async (tx) => {
     await tx.sitterProfile.update({ where: { id: profile.id }, data: profileData });
@@ -169,6 +177,8 @@ export async function searchSitters(input: {
       displayName: profile.account.userProfile?.fullName ?? "Opiekun Pupply",
       bio: profile.bio,
       city: profile.city,
+      region: profile.region,
+      photoKey: profile.photoKey,
       serviceRadiusKm: profile.serviceRadiusKm,
       services: profile.services,
       availability: profile.availability,
@@ -178,7 +188,7 @@ export async function searchSitters(input: {
     .sort((a, b) => a.distanceKm - b.distanceKm || a.id.localeCompare(b.id));
   const start = (input.page - 1) * input.pageSize;
   return {
-    items: matches.slice(start, start + input.pageSize),
+    items: await Promise.all(matches.slice(start, start + input.pageSize).map(async ({ photoKey, ...profile }) => ({ ...profile, photoUrl: await getPetPhotoUrl(photoKey) }))),
     pagination: { page: input.page, pageSize: input.pageSize, total: matches.length }
   };
 }

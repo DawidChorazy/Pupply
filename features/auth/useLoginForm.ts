@@ -1,36 +1,14 @@
+import { googleAuthConfig, getGoogleLoginConfigurationError } from "@/features/auth/google-config";
 import { API_BASE_URL } from "@/constants/api";
 import { ApiError } from "@/services/api-client";
 import { loginUser, loginWithGoogle } from "@/services/auth-service";
 import { saveAuthTokens } from "@/services/auth-storage";
-import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useEffect, useState } from "react";
-import { Platform } from "react-native";
-
-const missingGoogleClientId = "missing-google-client-id";
-const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
-const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim();
-const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
-const googleRedirectUri =
-  Platform.OS === "web"
-    ? AuthSession.makeRedirectUri({ path: "" })
-    : process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI?.trim();
 
 WebBrowser.maybeCompleteAuthSession();
-
-function getGoogleClientIdForPlatform() {
-  if (Platform.OS === "android") {
-    return googleAndroidClientId;
-  }
-
-  if (Platform.OS === "ios") {
-    return googleIosClientId;
-  }
-
-  return googleWebClientId;
-}
 
 export function useLoginForm() {
   const router = useRouter();
@@ -39,15 +17,8 @@ export function useLoginForm() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
-  const googleClientIdConfigured = Boolean(getGoogleClientIdForPlatform());
-  const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest({
-    clientId: missingGoogleClientId,
-    webClientId: googleWebClientId || missingGoogleClientId,
-    androidClientId: googleAndroidClientId || missingGoogleClientId,
-    iosClientId: googleIosClientId || missingGoogleClientId,
-    redirectUri: googleRedirectUri,
-    selectAccount: true
-  });
+  const googleConfigurationError = getGoogleLoginConfigurationError();
+  const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest(googleAuthConfig);
 
   useEffect(() => {
     if (!googleResponse) {
@@ -85,7 +56,7 @@ export function useLoginForm() {
     }
 
     if (googleResponse.type === "error") {
-      setError(googleResponse.error?.message || "Logowanie Google nie powiodlo sie*");
+      setError(googleResponse.error?.description || "Logowanie Google nie powiodlo sie*");
     }
 
     setIsGoogleSubmitting(false);
@@ -131,8 +102,8 @@ export function useLoginForm() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!googleClientIdConfigured) {
-      setError("Brak konfiguracji Google Client ID dla tej platformy*");
+    if (googleConfigurationError) {
+      setError(googleConfigurationError);
       return;
     }
 

@@ -138,6 +138,8 @@ model SitterProfile {
   accountId       String             @unique
   bio             String
   city            String
+  region          String?
+  photoKey        String?
   latitude        Float
   longitude       Float
   serviceRadiusKm Int                @default(10)
