@@ -29,6 +29,8 @@ import {
   serializePetAllergies,
   serializePetIllnesses
 } from "@/types/pet-health";
+import { getPetDocuments } from "@/services/pet-documents-store";
+import { PetDocumentList } from "@/components/forms/pet-document-list"
 
 type DogForm = {
   photoUrl: string;
@@ -96,6 +98,7 @@ function mapPetToForm(pet: Pet): DogForm {
 
 export default function PetDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const documents = getPetDocuments(id ?? "")
   const [form, setForm] = useState<DogForm>(initialForm);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -393,6 +396,11 @@ export default function PetDetailsScreen() {
             multiline
             textAlignVertical="top"
           />
+        </View>
+
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Dokumenty medyczne</Text>
+          <PetDocumentList documents={documents}/>
         </View>
 
         {error ? <Text style={styles.statusTextError}>{error}</Text> : null}
