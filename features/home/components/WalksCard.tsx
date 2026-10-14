@@ -1,7 +1,7 @@
 import { UpcomingWalk } from "@/types/walks";
 import { getWalkStage, getWalkStageLabel } from "@/features/walks/walkStage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { TouchableOpacity, View } from "react-native";
 
 import { styles } from "../styles";

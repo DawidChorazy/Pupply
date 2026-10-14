@@ -1,6 +1,6 @@
 import { Pet } from "@/types/pets";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { Image } from "expo-image";
 import { ActivityIndicator, TouchableOpacity, View } from "react-native";
 

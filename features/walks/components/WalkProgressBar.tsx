@@ -2,7 +2,7 @@ import { bookWalkStyles as styles } from "@/features/walks/styles";
 import { getWalkStageIndex, WALK_STAGE_STEPS } from "@/features/walks/walkStage";
 import { WalkStage } from "@/types/walks";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { View } from "react-native";
 
 type WalkProgressBarProps = {

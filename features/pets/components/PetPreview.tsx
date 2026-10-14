@@ -1,7 +1,7 @@
 import { addDogStyles as styles } from "@/features/home/styles";
 import { PetForm, genderOptions } from "@/features/pets/usePetForm";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { Image, TouchableOpacity, View } from "react-native";
 
 type PetPreviewProps = {

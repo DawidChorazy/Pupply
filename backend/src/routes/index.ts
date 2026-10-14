@@ -8,8 +8,10 @@ import { petsRouter } from "./pets.routes";
 import { sitterRouter } from "./sitter.routes";
 import { userRouter } from "./user.routes";
 import { uploadRouter } from "./upload.routes";
+import { locationRouter } from "./location.routes";
 
 const apiRouter = Router();
+apiRouter.use("/locations", locationRouter);
 
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/bookings", bookingRouter);
