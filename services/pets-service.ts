@@ -32,3 +32,10 @@ export function updatePet(petId: string, payload: UpdatePetPayload, accessToken:
     body: JSON.stringify(payload)
   });
 }
+
+export function deletePet(petId: string, accessToken: string) {
+  return apiRequest<void>(API_ENDPOINTS.pets.detail(petId), {
+    method: "DELETE",
+    token: accessToken
+  });
+}

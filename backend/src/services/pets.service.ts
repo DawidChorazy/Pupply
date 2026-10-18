@@ -1,7 +1,8 @@
-import { AccountRole, PetGender } from "@prisma/client";
+import { AccountRole, Pet, PetGender } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
+import { assertPhotoExists, deletePetPhoto, getPetPhotoUrl } from "./storage.service";
 
 export interface CreatePetInput {
   name: string;
@@ -9,7 +10,7 @@ export interface CreatePetInput {
   breed?: string;
   weight?: number;
   gender: PetGender;
-  photoUrl?: string;
+  photoKey?: string;
   illnesses?: string;
   allergies?: string;
   vaccines?: string;
@@ -23,7 +24,7 @@ export interface UpdatePetInput {
   breed?: string;
   weight?: number;
   gender?: PetGender;
-  photoUrl?: string;
+  photoKey?: string;
   illnesses?: string;
   allergies?: string;
   vaccines?: string;
@@ -37,21 +38,31 @@ function ensureUserRole(role: AccountRole) {
   }
 }
 
+async function mapPet(pet: Pet) {
+  return {
+    ...pet,
+    photoUrl: pet.photoKey ? await getPetPhotoUrl(pet.photoKey) : pet.photoUrl
+  };
+}
+
 export async function createPet(accountId: string, role: AccountRole, input: CreatePetInput) {
   ensureUserRole(role);
 
-  return prisma.pet.create({
+  if (input.photoKey) await assertPhotoExists(accountId, input.photoKey);
+
+  const pet = await prisma.pet.create({
     data: {
       accountId,
       ...input
     }
   });
+  return mapPet(pet);
 }
 
 export async function listPets(accountId: string, role: AccountRole) {
   ensureUserRole(role);
 
-  return prisma.pet.findMany({
+  const pets = await prisma.pet.findMany({
     where: {
       accountId
     },
@@ -59,6 +70,7 @@ export async function listPets(accountId: string, role: AccountRole) {
       createdAt: "desc"
     }
   });
+  return Promise.all(pets.map(mapPet));
 }
 
 export async function getPet(accountId: string, role: AccountRole, petId: string) {
@@ -75,7 +87,7 @@ export async function getPet(accountId: string, role: AccountRole, petId: string
     throw new AppError(404, "Pet not found", "PET_NOT_FOUND");
   }
 
-  return pet;
+  return mapPet(pet);
 }
 
 export async function updatePet(
@@ -97,10 +109,32 @@ export async function updatePet(
     throw new AppError(404, "Pet not found", "PET_NOT_FOUND");
   }
 
-  return prisma.pet.update({
+  if (input.photoKey) await assertPhotoExists(accountId, input.photoKey);
+
+  const updatedPet = await prisma.pet.update({
     where: {
       id: pet.id
     },
     data: input
   });
+
+  if (input.photoKey && pet.photoKey && input.photoKey !== pet.photoKey) {
+    await deletePetPhoto(pet.photoKey).catch(() => undefined);
+  }
+
+  return mapPet(updatedPet);
+}
+
+export async function deletePet(accountId: string, role: AccountRole, petId: string) {
+  ensureUserRole(role);
+  const pet = await prisma.pet.findFirst({
+    where: { id: petId, accountId },
+    include: { _count: { select: { bookings: true } } }
+  });
+  if (!pet) throw new AppError(404, "Pet not found", "PET_NOT_FOUND");
+  if (pet._count.bookings > 0) {
+    throw new AppError(409, "Pet with booking history cannot be deleted", "PET_HAS_BOOKINGS");
+  }
+  await prisma.pet.delete({ where: { id: pet.id } });
+  await deletePetPhoto(pet.photoKey).catch(() => undefined);
 }

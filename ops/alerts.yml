@@ -1,0 +1,37 @@
+groups:
+  - name: pupply
+    rules:
+      - alert: PupplyNotificationBacklog
+        expr: pupply_notification_delivery_oldest_pending_age_seconds > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Notification delivery is delayed by more than 15 minutes
+      - alert: PupplyNotificationFailed
+        expr: delta(pupply_notification_delivery_failed[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Notification delivery exhausted its retries
+      - alert: PupplyUnavailable
+        expr: up{job="pupply"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Pupply API metrics are unavailable
+      - alert: PupplyServerErrors
+        expr: sum(rate(pupply_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(pupply_http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5% of Pupply requests return server errors
+      - alert: PupplyMaintenanceStalled
+        expr: time() - pupply_maintenance_last_success_timestamp_seconds > 600
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Booking expiry, reminders or notification delivery have stopped

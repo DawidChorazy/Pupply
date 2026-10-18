@@ -7,6 +7,8 @@ import { env } from "../config/env";
 type AccessPayload = {
   accountId: string;
   role: AccountRole;
+  version: number;
+  sessionId?: string;
 };
 
 type RefreshPayload = AccessPayload & {
@@ -14,9 +16,11 @@ type RefreshPayload = AccessPayload & {
   type: "refresh";
 };
 
-export function signAccessToken(accountId: string, role: AccountRole) {
-  return jwt.sign({ role }, env.JWT_ACCESS_SECRET, {
+export function signAccessToken(accountId: string, role: AccountRole, version = 0, sessionId?: string) {
+  return jwt.sign({ role, version, sessionId }, env.JWT_ACCESS_SECRET, {
     subject: accountId,
+    issuer: "pupply-api",
+    audience: "pupply-app",
     expiresIn: env.JWT_ACCESS_EXPIRES_IN as jwt.SignOptions["expiresIn"]
   });
 }
@@ -24,13 +28,20 @@ export function signAccessToken(accountId: string, role: AccountRole) {
 export function signRefreshToken(accountId: string, role: AccountRole, tokenId: string) {
   return jwt.sign({ role, tokenId, type: "refresh" }, env.JWT_REFRESH_SECRET, {
     subject: accountId,
+    issuer: "pupply-api",
+    audience: "pupply-app",
     expiresIn: env.JWT_REFRESH_EXPIRES_IN as jwt.SignOptions["expiresIn"]
   });
 }
 
 export function verifyAccessToken(token: string): AccessPayload {
-  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as jwt.JwtPayload & {
+  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+    issuer: "pupply-api",
+    audience: "pupply-app"
+  }) as jwt.JwtPayload & {
     role?: AccountRole;
+    version?: number;
+    sessionId?: string;
   };
 
   if (!decoded.sub || !decoded.role) {
@@ -39,12 +50,17 @@ export function verifyAccessToken(token: string): AccessPayload {
 
   return {
     accountId: decoded.sub,
-    role: decoded.role
+    role: decoded.role,
+    version: decoded.version ?? 0,
+    sessionId: decoded.sessionId
   };
 }
 
 export function verifyRefreshToken(token: string): RefreshPayload {
-  const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET) as jwt.JwtPayload & {
+  const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET, {
+    issuer: "pupply-api",
+    audience: "pupply-app"
+  }) as jwt.JwtPayload & {
     role?: AccountRole;
     tokenId?: string;
     type?: string;
@@ -57,6 +73,7 @@ export function verifyRefreshToken(token: string): RefreshPayload {
   return {
     accountId: decoded.sub,
     role: decoded.role,
+    version: 0,
     tokenId: decoded.tokenId,
     type: "refresh"
   };
@@ -68,4 +85,8 @@ export function hashToken(token: string) {
 
 export function createRefreshTokenId() {
   return crypto.randomUUID();
+}
+
+export function createOpaqueToken() {
+  return crypto.randomBytes(32).toString("base64url");
 }

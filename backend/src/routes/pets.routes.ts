@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { requireAuth } from "../middleware/require-auth";
-import { createPet, getPet, listPets, updatePet } from "../services/pets.service";
+import { createPet, deletePet, getPet, listPets, updatePet } from "../services/pets.service";
 import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import { createPetSchema, updatePetSchema } from "../validation/pets.schemas";
@@ -49,7 +49,7 @@ petsRouter.get(
       throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
     }
 
-    const pet = await getPet(req.auth.accountId, req.auth.role, req.params.petId);
+    const pet = await getPet(req.auth.accountId, req.auth.role, String(req.params.petId));
 
     res.status(200).json({
       pet
@@ -66,11 +66,21 @@ petsRouter.patch(
     }
 
     const payload = updatePetSchema.parse(req.body);
-    const pet = await updatePet(req.auth.accountId, req.auth.role, req.params.petId, payload);
+    const pet = await updatePet(req.auth.accountId, req.auth.role, String(req.params.petId), payload);
 
     res.status(200).json({
       pet
     });
+  })
+);
+
+petsRouter.delete(
+  "/:petId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
+    await deletePet(req.auth.accountId, req.auth.role, String(req.params.petId));
+    res.status(204).send();
   })
 );
 

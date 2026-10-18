@@ -1,10 +1,10 @@
+import { googleAuthConfig, getGoogleLoginConfigurationError } from "@/features/auth/google-config";
 import { API_BASE_URL } from '@/constants/api';
 import { Fonts } from '@/constants/theme';
 import { ApiError } from '@/services/api-client';
 import { loginUser, loginWithGoogle } from '@/services/auth-service';
 import { saveAuthTokens } from '@/services/auth-storage';
 import { Ionicons } from '@expo/vector-icons';
-import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -13,27 +13,101 @@ import { ActivityIndicator, Dimensions, Platform, StyleSheet, Text, TextInput, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get("window");
-const missingGoogleClientId = "missing-google-client-id";
-const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
-const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim();
-const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
-const googleRedirectUri =
-  Platform.OS === "web"
-    ? AuthSession.makeRedirectUri({ path: "" })
-    : process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI?.trim();
-
 WebBrowser.maybeCompleteAuthSession();
 
-function getGoogleClientIdForPlatform() {
-  if (Platform.OS === "android") {
-    return googleAndroidClientId;
-  }
+type GoogleLoginButtonProps = {
+  disabled: boolean;
+  onError: (message: string) => void;
+  onSubmittingChange: (isSubmitting: boolean) => void;
+};
 
-  if (Platform.OS === "ios") {
-    return googleIosClientId;
-  }
+function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLoginButtonProps) {
+  const router = useRouter();
+  const googleConfigurationError = getGoogleLoginConfigurationError();
+  const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest(googleAuthConfig);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  return googleWebClientId;
+  useEffect(() => {
+    if (!googleResponse) return;
+
+    if (googleResponse.type === "success") {
+      const idToken = googleResponse.params.id_token || googleResponse.authentication?.idToken;
+
+      if (!idToken) {
+        onError("Google nie zwrócił tokenu logowania*");
+        setIsSubmitting(false);
+        onSubmittingChange(false);
+        return;
+      }
+
+      loginWithGoogle({ idToken })
+        .then(async (response) => {
+          await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
+          router.replace("/mainScreen/MainScreen");
+        })
+        .catch((requestError) => {
+          if (requestError instanceof ApiError) {
+            onError(requestError.message || "Logowanie Google nie powiodło się*");
+          } else {
+            const details = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : "";
+            onError(`Brak połączenia z API${details}. URL: ${API_BASE_URL}`);
+          }
+        })
+        .finally(() => {
+          setIsSubmitting(false);
+          onSubmittingChange(false);
+        });
+      return;
+    }
+
+    if (googleResponse.type === "error") {
+      onError(googleResponse.error?.description || "Logowanie Google nie powiodło się*");
+    }
+    setIsSubmitting(false);
+    onSubmittingChange(false);
+  }, [googleResponse, onError, onSubmittingChange, router]);
+
+  const handlePress = async () => {
+    if (googleConfigurationError) {
+      onError(googleConfigurationError);
+      return;
+    }
+
+    onError("");
+    setIsSubmitting(true);
+    onSubmittingChange(true);
+
+    try {
+      const result = await promptGoogleSignIn();
+      if (result.type !== "success") {
+        setIsSubmitting(false);
+        onSubmittingChange(false);
+      }
+    } catch (requestError) {
+      const details = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : "";
+      onError(`Logowanie Google nie powiodło się${details}`);
+      setIsSubmitting(false);
+      onSubmittingChange(false);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      style={styles.googleButton}
+      activeOpacity={0.8}
+      disabled={disabled || isSubmitting || (!googleConfigurationError && !googleRequest)}
+      onPress={handlePress}
+    >
+      {isSubmitting ? (
+        <ActivityIndicator color="#1F2937" />
+      ) : (
+        <>
+          <Ionicons name="logo-google" size={20} color="#1F2937" />
+          <Text style={styles.googleButtonText}>Zaloguj przez Google</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
 }
 
 export default function HomeScreen()  {
@@ -43,56 +117,13 @@ export default function HomeScreen()  {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
-  const googleClientIdConfigured = Boolean(getGoogleClientIdForPlatform());
-  const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest({
-    clientId: missingGoogleClientId,
-    webClientId: googleWebClientId || missingGoogleClientId,
-    androidClientId: googleAndroidClientId || missingGoogleClientId,
-    iosClientId: googleIosClientId || missingGoogleClientId,
-    redirectUri: googleRedirectUri,
-    selectAccount: true
-  });
+  const [googleAuthAllowed, setGoogleAuthAllowed] = useState(Platform.OS !== "web");
 
   useEffect(() => {
-    if (!googleResponse) {
-      return;
+    if (Platform.OS === "web") {
+      setGoogleAuthAllowed(typeof window !== "undefined" && window.isSecureContext);
     }
-
-    if (googleResponse.type === "success") {
-      const idToken = googleResponse.params.id_token || googleResponse.authentication?.idToken;
-
-      if (!idToken) {
-        setError("Google nie zwrocil tokenu logowania*");
-        setIsGoogleSubmitting(false);
-        return;
-      }
-
-      loginWithGoogle({ idToken })
-        .then(async (response) => {
-          await saveAuthTokens(response.accessToken, response.refreshToken);
-          router.replace('/mainScreen/MainScreen');
-        })
-        .catch((requestError) => {
-          if (requestError instanceof ApiError) {
-            setError(requestError.message || "Logowanie Google nie powiodlo sie*");
-          } else {
-            const errorDetails = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : '';
-            setError(`Brak polaczenia z API${errorDetails}. URL: ${API_BASE_URL}`);
-          }
-        })
-        .finally(() => {
-          setIsGoogleSubmitting(false);
-        });
-
-      return;
-    }
-
-    if (googleResponse.type === "error") {
-      setError(googleResponse.error?.message || "Logowanie Google nie powiodlo sie*");
-    }
-
-    setIsGoogleSubmitting(false);
-  }, [googleResponse, router]);
+  }, []);
 
   const loginValidation = async () => {
       if (email.trim() === '' && password.trim() === '') {
@@ -111,7 +142,7 @@ export default function HomeScreen()  {
             password
           });
 
-          await saveAuthTokens(response.accessToken, response.refreshToken);
+          await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
           router.replace('/mainScreen/MainScreen');
         } catch (requestError) {
           if (requestError instanceof ApiError) {
@@ -125,28 +156,6 @@ export default function HomeScreen()  {
         }
       }
 
-  }
-
-  const googleLoginValidation = async () => {
-    if (!googleClientIdConfigured) {
-      setError("Brak konfiguracji Google Client ID dla tej platformy*");
-      return;
-    }
-
-    setError('');
-    setIsGoogleSubmitting(true);
-
-    try {
-      const result = await promptGoogleSignIn();
-
-      if (result.type !== "success") {
-        setIsGoogleSubmitting(false);
-      }
-    } catch (requestError) {
-      const errorDetails = requestError instanceof Error && requestError.message ? ` (${requestError.message})` : '';
-      setError(`Logowanie Google nie powiodlo sie${errorDetails}`);
-      setIsGoogleSubmitting(false);
-    }
   }
 
   return (
@@ -183,28 +192,31 @@ export default function HomeScreen()  {
 
               {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-              <TouchableOpacity
-                style={styles.googleButton}
-                activeOpacity={0.8}
-                disabled={isSubmitting || isGoogleSubmitting || !googleRequest}
-                onPress={googleLoginValidation}
-              >
-                {isGoogleSubmitting ? (
-                  <ActivityIndicator color="#1F2937" />
-                ) : (
-                  <>
-                    <Ionicons name="logo-google" size={20} color="#1F2937" />
-                    <Text style={styles.googleButtonText}>Zaloguj przez Google</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              {googleAuthAllowed ? (
+                <GoogleLoginButton
+                  disabled={isSubmitting}
+                  onError={setError}
+                  onSubmittingChange={setIsGoogleSubmitting}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={styles.googleButton}
+                  activeOpacity={0.8}
+                  disabled={isSubmitting}
+                  onPress={() => setError("Logowanie Google w przeglądarce wymaga HTTPS lub adresu localhost*")}
+                >
+                  <Ionicons name="logo-google" size={20} color="#1F2937" />
+                  <Text style={styles.googleButtonText}>Zaloguj przez Google</Text>
+                </TouchableOpacity>
+              )}
 
+              <TouchableOpacity onPress={() => router.push("/reset-password" as never)}><Text style={styles.googleButtonText}>Nie pamiętam hasła</Text></TouchableOpacity>
               <TouchableOpacity 
                 style={styles.loginButton}
                 activeOpacity={0.8}
                 disabled={isSubmitting || isGoogleSubmitting}
                 onPress={loginValidation}// do odkomentowania jak login zadziala i usunąć linie poniżej
-               // onPress={() => router.push("../mainScreen/MainScreen")}
+              //  onPress={() => router.push("../mainScreen/MainScreen")}
               >
                 {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginButtonText}>Zaloguj się</Text>}
               </TouchableOpacity>

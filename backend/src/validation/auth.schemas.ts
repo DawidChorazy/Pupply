@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const passwordSchema = z
+export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters long")
   .regex(/[a-z]/, "Password must include a lowercase letter")
@@ -12,6 +12,19 @@ const phoneSchema = z
   .trim()
   .regex(/^\+?[0-9]{9,15}$/, "Phone number must contain 9-15 digits")
   .transform((value) => (value.startsWith("+") ? value : `+${value}`));
+
+function isValidPastDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [, year, month, day] = match.map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day &&
+    date <= new Date()
+  );
+}
 
 export const registerUserSchema = z
   .object({
@@ -33,8 +46,8 @@ export const registerUserSchema = z
 
         return value;
       })
-      .refine((value) => !value || !Number.isNaN(Date.parse(value)), {
-        message: "Birth date must be a valid date string"
+      .refine((value) => !value || isValidPastDate(value), {
+        message: "Birth date must be a valid past date"
       }),
     password: passwordSchema,
     confirmPassword: z.string()
@@ -69,4 +82,25 @@ export const googleLoginSchema = z.object({
 
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(10, "Refresh token is required")
+});
+
+export const logoutSchema = refreshTokenSchema;
+
+export const requestPasswordResetSchema = z.object({
+  email: z.string().trim().email().transform((value) => value.toLowerCase())
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(20, "Reset token is required"),
+    password: passwordSchema,
+    confirmPassword: z.string()
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match"
+  });
+
+export const confirmEmailVerificationSchema = z.object({
+  token: z.string().min(20, "Verification token is required")
 });

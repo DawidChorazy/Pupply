@@ -10,6 +10,7 @@ datasource db {
 enum AccountRole {
   USER
   CLINIC
+  ADMIN
 }
 
 enum PetGender {
@@ -17,52 +18,112 @@ enum PetGender {
   FEMALE
 }
 
+enum SitterServiceType {
+  DOG_WALK
+  DROP_IN
+  DAY_CARE
+}
+
+enum BookingStatus {
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+}
+
+enum NotificationType {
+  BOOKING_REQUESTED
+  BOOKING_ACCEPTED
+  BOOKING_REJECTED
+  BOOKING_CANCELLED
+  BOOKING_COMPLETED
+  BOOKING_EXPIRED
+  DOCUMENT_EXPIRING
+}
+
+enum AccountTokenType {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+  EMAIL_CHANGE
+}
+
 model Account {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  passwordHash  String?
-  googleId      String?        @unique
-  role          AccountRole
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  userProfile   UserProfile?
-  clinicProfile ClinicProfile?
-  refreshTokens RefreshToken[]
-  pets          Pet[]
+  id              String               @id @default(cuid())
+  email           String               @unique
+  passwordHash    String?
+  googleId        String?              @unique
+  role            AccountRole
+  emailVerifiedAt DateTime?
+  authVersion     Int                  @default(0)
+  deactivatedAt   DateTime?
+  blockedAt       DateTime?
+  emailNotifications Boolean           @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  userProfile     UserProfile?
+  clinicProfile   ClinicProfile?
+  refreshTokens   RefreshToken[]
+  actionTokens    AccountActionToken[]
+  pets            Pet[]
+  sitterProfile   SitterProfile?
+  ownedBookings   Booking[]            @relation("OwnerBookings")
+  sitterBookings  Booking[]            @relation("SitterBookings")
+  questClaims     QuestClaim[]
+  notifications   Notification[]
+  pushDevices     PushDevice[]
 }
 
 model UserProfile {
-  id        String   @id @default(cuid())
-  accountId String   @unique
+  id        String    @id @default(cuid())
+  accountId String    @unique
   fullName  String
   phone     String
   birthDate DateTime?
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
 model ClinicProfile {
-  id        String  @id @default(cuid())
-  accountId String  @unique
+  id         String  @id @default(cuid())
+  accountId  String  @unique
   clinicName String
-  nip       String  @unique
-  phone     String
-  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  nip        String  @unique
+  phone      String
+  account    Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
 model RefreshToken {
-  id        String   @id
+  id        String    @id
   accountId String
   tokenHash String
+  familyId  String
   expiresAt DateTime
   revokedAt DateTime?
-  createdAt DateTime @default(now())
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId])
+  @@index([familyId])
+}
+
+model AccountActionToken {
+  id        String           @id @default(cuid())
+  accountId String
+  type      AccountTokenType
+  tokenHash String           @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+  pendingEmail String?
+  account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, type])
+  @@index([expiresAt])
 }
 
 model Pet {
-  id        String     @id @default(cuid())
+  id        String    @id @default(cuid())
   accountId String
   name      String
   age       Int?
@@ -70,14 +131,196 @@ model Pet {
   weight    Float?
   gender    PetGender
   photoUrl  String?
+  photoKey  String?
   illnesses String?
   allergies String?
   vaccines  String?
   vet       String?
   notes     String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  bookings  Booking[]
+  documents PetDocument[]
+  shareLinks PetShareLink[]
 
   @@index([accountId])
+}
+
+model SitterProfile {
+  id              String             @id @default(cuid())
+  accountId       String             @unique
+  bio             String
+  city            String
+  region          String?
+  photoKey        String?
+  latitude        Float
+  longitude       Float
+  serviceRadiusKm Int                @default(10)
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  account         Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  services        SitterService[]
+  availability    AvailabilitySlot[]
+
+  @@index([isActive, city])
+}
+
+model SitterService {
+  id              String            @id @default(cuid())
+  sitterProfileId String
+  type            SitterServiceType
+  durationMinutes Int
+  priceCents      Int
+  currency        String            @default("PLN")
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  sitterProfile   SitterProfile     @relation(fields: [sitterProfileId], references: [id], onDelete: Cascade)
+  bookings        Booking[]
+
+  @@unique([sitterProfileId, type, durationMinutes])
+  @@index([type, isActive])
+}
+
+model AvailabilitySlot {
+  id              String        @id @default(cuid())
+  sitterProfileId String
+  startsAt        DateTime
+  endsAt          DateTime
+  createdAt       DateTime      @default(now())
+  sitterProfile   SitterProfile @relation(fields: [sitterProfileId], references: [id], onDelete: Cascade)
+  bookings        Booking[]
+
+  @@unique([sitterProfileId, startsAt, endsAt])
+  @@index([sitterProfileId, startsAt])
+}
+
+model Booking {
+  id                 String           @id @default(cuid())
+  ownerAccountId     String
+  sitterAccountId    String
+  petId              String
+  sitterServiceId    String
+  availabilitySlotId String
+  status             BookingStatus    @default(REQUESTED)
+  activeSlotKey      String?
+  startsAt           DateTime
+  endsAt             DateTime
+  expiresAt          DateTime
+  priceCents         Int
+  currency           String           @default("PLN")
+  note               String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  owner              Account          @relation("OwnerBookings", fields: [ownerAccountId], references: [id], onDelete: Cascade)
+  sitter             Account          @relation("SitterBookings", fields: [sitterAccountId], references: [id], onDelete: Cascade)
+  pet                Pet              @relation(fields: [petId], references: [id], onDelete: Restrict)
+  sitterService      SitterService    @relation(fields: [sitterServiceId], references: [id], onDelete: Restrict)
+  availabilitySlot   AvailabilitySlot @relation(fields: [availabilitySlotId], references: [id], onDelete: Restrict)
+  notifications      Notification[]
+
+  @@index([ownerAccountId, createdAt])
+  @@index([sitterAccountId, createdAt])
+  @@index([availabilitySlotId])
+  @@index([status, expiresAt])
+}
+
+model PetDocument {
+  id                 String   @id @default(cuid())
+  petId              String
+  objectKey          String   @unique
+  name               String
+  sizeBytes          Int
+  expiresAt          DateTime?
+  reminderDaysBefore Int      @default(7)
+  reminderSentAt     DateTime?
+  uploadedAt         DateTime?
+  createdAt          DateTime @default(now())
+  pet                Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt, reminderSentAt])
+}
+
+model PetShareLink {
+  id               String   @id @default(cuid())
+  petId            String
+  tokenHash        String   @unique
+  label            String?
+  includeDocuments Boolean  @default(false)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+  pet              Pet      @relation(fields: [petId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([petId, createdAt])
+  @@index([expiresAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  accountId String
+  bookingId String?
+  type      NotificationType
+  title     String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  deliveryEnqueuedAt DateTime?
+  deliveries NotificationDelivery[]
+  account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  booking   Booking?         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@index([accountId, readAt])
+}
+
+model PushDevice {
+  id        String @id @default(cuid())
+  accountId String
+  token     String @unique
+  sessionId String
+  createdAt DateTime @default(now())
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@index([accountId])
+}
+
+model NotificationDelivery {
+  id             String @id @default(cuid())
+  notificationId String
+  channel        String
+  destination    String
+  attempts       Int @default(0)
+  nextAttemptAt  DateTime @default(now())
+  lockedUntil    DateTime?
+  sentAt         DateTime?
+  failedAt       DateTime?
+  ticketId       String?
+  receiptCheckedAt DateTime?
+  createdAt      DateTime @default(now())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  @@unique([notificationId, channel, destination])
+  @@index([sentAt, failedAt, nextAttemptAt])
+}
+
+model AuditLog {
+  id              String @id @default(cuid())
+  actorAccountId  String
+  targetAccountId String
+  action          String
+  reason          String?
+  createdAt       DateTime @default(now())
+  @@index([targetAccountId, createdAt])
+}
+
+model QuestClaim {
+  id        String   @id @default(cuid())
+  accountId String
+  questId   String
+  points    Int
+  claimedAt DateTime @default(now())
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, questId])
 }
