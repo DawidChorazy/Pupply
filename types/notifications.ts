@@ -5,7 +5,9 @@ export type NotificationType =
   | "BOOKING_ACCEPTED"
   | "BOOKING_REJECTED"
   | "BOOKING_CANCELLED"
-  | "BOOKING_COMPLETED";
+  | "BOOKING_COMPLETED"
+  | "BOOKING_EXPIRED"
+  | "DOCUMENT_EXPIRING";
 
 export interface AppNotification {
   id: string;

@@ -1,195 +1,44 @@
-import { bookWalkStyles as styles } from "@/features/walks/styles";
-import { WalkMapPreview } from "@/features/walks/components/WalkMapPreview";
-import { WalkProgressBar } from "@/features/walks/components/WalkProgressBar";
-import { getCaregiverById } from "@/features/walks/mockData";
-import { useWalksList } from "@/features/walks/useWalksList";
-import {
-  formatElapsedTime,
-  getWalkElapsedSeconds,
-  getWalkStage,
-  getWalkStageLabel
-} from "@/features/walks/walkStage";
-import { WalkStage } from "@/types/walks";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "expo-router/react-navigation";
+import { useCallback, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { Linking, ScrollView, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { getBooking } from "@/services/bookings-service";
+import { Booking } from "@/types/marketplace";
+import { marketplaceStyles as styles } from "@/styles/marketplace";
 
-function getStatusBannerStyle(stage: WalkStage) {
-  switch (stage) {
-    case "waiting":
-      return styles.detailStatusBannerWaiting;
-    case "in_progress":
-      return styles.detailStatusBannerActive;
-    case "returning":
-      return styles.detailStatusBannerReturning;
-    case "completed":
-      return styles.detailStatusBannerCompleted;
-  }
-}
-
-function getStatusMessage(stage: WalkStage, caregiverName: string, petName: string) {
-  switch (stage) {
-    case "waiting":
-      return {
-        title: "Oczekiwanie na opiekuna",
-        text: `${caregiverName} wkrótce odbierze ${petName} i rozpocznie spacer.`
-      };
-    case "in_progress":
-      return {
-        title: "Spacer w trakcie",
-        text: `${petName} jest na spacerze z ${caregiverName}. Możesz śledzić trasę na mapie.`
-      };
-    case "returning":
-      return {
-        title: "Powrót do domu",
-        text: `${caregiverName} wraca z ${petName}. Spacer dobiega końca.`
-      };
-    case "completed":
-      return {
-        title: "Spacer zakończony",
-        text: `${petName} wrócił bezpiecznie. Dziękujemy za skorzystanie z usługi.`
-      };
-  }
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detailField}>
-      <Text style={styles.detailFieldLabel}>{label}</Text>
-      <Text style={styles.detailFieldValue}>{value}</Text>
-    </View>
-  );
-}
-
+const labels = { REQUESTED: "Oczekuje na akceptację", ACCEPTED: "Zaakceptowana", REJECTED: "Odrzucona", CANCELLED: "Anulowana", COMPLETED: "Zakończona", EXPIRED: "Wygasła" };
 export default function WalkDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
-  const { walks } = useWalksList();
-  const [now, setNow] = useState(Date.now());
-
-  const walk = walks.find((item) => item.id === (id ? String(id) : ""));
-  const caregiver = getCaregiverById(walk?.caregiverId);
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (!walk) {
-    return (
-      <View style={[styles.container, styles.contentContainer]}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <MaterialCommunityIcons name="arrow-left" size={22} color="#3D2415" />
-          </TouchableOpacity>
-          <View style={styles.headerCopy}>
-            <Text style={styles.title}>Nie znaleziono spaceru</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  const bookedAt = walk.bookedAt ?? new Date().toISOString();
-  const normalizedWalk = { ...walk, bookedAt };
-  const stage = getWalkStage(normalizedWalk, now);
-  const statusMessage = getStatusMessage(stage, walk.caregiverName, walk.petName);
-  const elapsedSeconds = getWalkElapsedSeconds(normalizedWalk, now);
-  const showLiveMap = stage === "in_progress" || stage === "returning";
-
-  const handleCall = () => {
-    const phone = walk.caregiverPhone?.replace(/\s/g, "") ?? "";
-    if (phone) {
-      void Linking.openURL(`tel:${phone}`);
-    }
-  };
-
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={22} color="#3D2415" />
-        </TouchableOpacity>
-
-        <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>Szczegóły spaceru</Text>
-          <Text style={styles.title}>
-            {walk.petName} z {walk.caregiverName}
-          </Text>
-          <Text style={styles.subtitle}>{walk.time}</Text>
-        </View>
-      </View>
-
-      <WalkProgressBar currentStage={stage} />
-
-      <View style={[styles.detailStatusBanner, getStatusBannerStyle(stage)]}>
-        <MaterialCommunityIcons
-          name={
-            stage === "completed"
-              ? "check-circle-outline"
-              : stage === "in_progress"
-                ? "walk"
-                : stage === "returning"
-                  ? "home-export-outline"
-                  : "clock-outline"
-          }
-          size={22}
-          color="#D35400"
-        />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.detailStatusTitle}>{statusMessage.title}</Text>
-          <Text style={styles.detailStatusText}>{statusMessage.text}</Text>
-        </View>
-      </View>
-
-      {showLiveMap ? (
-        <>
-          <WalkMapPreview walk={normalizedWalk} now={now} />
-
-          <View style={styles.liveInfoRow}>
-            <View style={styles.liveInfoCard}>
-              <Text style={styles.liveInfoLabel}>Czas spaceru</Text>
-              <Text style={styles.liveInfoValue}>{formatElapsedTime(elapsedSeconds)}</Text>
-              <Text style={styles.detailStatusText}>z {walk.durationLabel}</Text>
-            </View>
-
-            <View style={styles.liveInfoCard}>
-              <Text style={styles.liveInfoLabel}>Status</Text>
-              <Text style={styles.liveInfoValue}>{getWalkStageLabel(stage)}</Text>
-              <Text style={styles.detailStatusText}>
-                {stage === "returning" ? "Opiekun wraca" : "Trasa aktywna"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Kontakt z opiekunem</Text>
-            <DetailField label="Imię i nazwisko" value={walk.caregiverName} />
-            <DetailField label="Telefon" value={walk.caregiverPhone ?? "—"} />
-
-            <TouchableOpacity style={styles.phoneButton} activeOpacity={0.85} onPress={handleCall}>
-              <MaterialCommunityIcons name="phone-outline" size={18} color="#D35400" />
-              <Text style={styles.phoneButtonText}>Zadzwoń do opiekuna</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : null}
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Informacje o spacerze</Text>
-        <DetailField label="Pupil" value={walk.petName} />
-        <DetailField label="Opiekun" value={walk.caregiverName} />
-        <DetailField label="Termin" value={walk.time} />
-        <DetailField label="Długość" value={walk.durationLabel} />
-        <DetailField label="Cena" value={`${walk.price} zł`} />
-        <DetailField label="Etap" value={getWalkStageLabel(stage)} />
-        {caregiver ? <DetailField label="Specjalizacja" value={caregiver.role} /> : null}
-      </View>
-    </ScrollView>
-  );
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const [booking, setBooking] = useState<Booking | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const requestId = useRef(0);
+  const load = useCallback(async () => {
+    const current = ++requestId.current;
+    setLoading(true); setError(""); setBooking(null);
+    try {
+      const result = await getBooking(String(id));
+      if (current === requestId.current) setBooking(result.booking);
+    } catch (error) {
+      if (current === requestId.current) setError(error instanceof Error ? error.message : "Nie udało się pobrać spaceru");
+    } finally { if (current === requestId.current) setLoading(false); }
+  }, [id]);
+  useFocusEffect(useCallback(() => {
+    void load();
+    return () => { requestId.current++; };
+  }, [load]));
+  return <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <TouchableOpacity onPress={() => router.back()}><Text style={styles.secondaryButtonText}>Wróć</Text></TouchableOpacity>
+    <Text style={styles.title}>Szczegóły rezerwacji</Text>
+    {loading ? <ActivityIndicator /> : null}
+    {error ? <TouchableOpacity onPress={() => void load()}><Text style={styles.statusError}>{error} · Spróbuj ponownie</Text></TouchableOpacity> : null}
+    {booking ? <View style={styles.card}>
+      <Text style={styles.cardTitle}>{booking.pet.name} z {booking.sitter.userProfile?.fullName ?? "opiekunem"}</Text>
+      <Text style={styles.body}>{labels[booking.status]}</Text>
+      <Text style={styles.body}>{new Date(booking.startsAt).toLocaleString("pl-PL")} – {new Date(booking.endsAt).toLocaleTimeString("pl-PL")}</Text>
+      <Text style={styles.body}>{(booking.priceCents / 100).toFixed(2)} zł</Text>
+      {booking.note ? <Text style={styles.body}>{booking.note}</Text> : null}
+      <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push("/marketplace/bookings" as never)}><Text style={styles.secondaryButtonText}>Zarządzaj rezerwacjami</Text></TouchableOpacity>
+    </View> : null}
+  </ScrollView>;
 }

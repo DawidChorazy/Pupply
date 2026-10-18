@@ -2,6 +2,9 @@ import { AccountRole, BookingStatus, NotificationType, Prisma } from "@prisma/cl
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
+import { env } from "../config/env";
+import { requireVerifiedEmail } from "./account-access.service";
+import { expireBookingRequests } from "./booking-expiry.service";
 
 function requireUser(role: AccountRole) {
   if (role !== "USER") throw new AppError(403, "Only users can manage bookings", "FORBIDDEN");
@@ -18,33 +21,45 @@ const bookingInclude = {
 export async function createBooking(
   accountId: string,
   role: AccountRole,
-  input: { petId: string; sitterServiceId: string; availabilitySlotId: string; note?: string }
+  input: { petId: string; sitterServiceId: string; availabilitySlotId: string; startsAt?: Date; note?: string }
 ) {
   requireUser(role);
-  const [pet, service, slot] = await Promise.all([
-    prisma.pet.findFirst({ where: { id: input.petId, accountId } }),
-    prisma.sitterService.findFirst({
-      where: { id: input.sitterServiceId, isActive: true, sitterProfile: { isActive: true } },
-      include: { sitterProfile: true }
-    }),
-    prisma.availabilitySlot.findUnique({ where: { id: input.availabilitySlotId } })
-  ]);
-  if (!pet) throw new AppError(404, "Pet was not found", "PET_NOT_FOUND");
-  if (!service) throw new AppError(404, "Sitter service was not found", "SERVICE_NOT_FOUND");
-  if (!slot || slot.sitterProfileId !== service.sitterProfileId) {
-    throw new AppError(404, "Availability slot was not found", "AVAILABILITY_NOT_FOUND");
-  }
-  if (service.sitterProfile.accountId === accountId) {
-    throw new AppError(409, "You cannot book your own service", "SELF_BOOKING_NOT_ALLOWED");
-  }
-  if (slot.startsAt <= new Date()) throw new AppError(409, "Availability slot has already started", "SLOT_UNAVAILABLE");
-  const slotMinutes = (slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000;
-  if (slotMinutes < service.durationMinutes) {
-    throw new AppError(409, "Availability slot is too short for this service", "SLOT_TOO_SHORT");
-  }
-
+  await requireVerifiedEmail(accountId);
+  await expireBookingRequests();
   try {
     return await prisma.$transaction(async (tx) => {
+      const [pet, service, slot] = await Promise.all([
+        tx.pet.findFirst({ where: { id: input.petId, accountId } }),
+        tx.sitterService.findFirst({
+          where: { id: input.sitterServiceId, isActive: true, sitterProfile: { isActive: true } },
+          include: { sitterProfile: true }
+        }),
+        tx.availabilitySlot.findUnique({ where: { id: input.availabilitySlotId } })
+      ]);
+      if (!pet) throw new AppError(404, "Pet was not found", "PET_NOT_FOUND");
+      if (!service) throw new AppError(404, "Sitter service was not found", "SERVICE_NOT_FOUND");
+      if (!slot || slot.sitterProfileId !== service.sitterProfileId) {
+        throw new AppError(404, "Availability slot was not found", "AVAILABILITY_NOT_FOUND");
+      }
+      if (service.sitterProfile.accountId === accountId) {
+        throw new AppError(409, "You cannot book your own service", "SELF_BOOKING_NOT_ALLOWED");
+      }
+      const participants = await tx.$queryRaw<{ id: string; emailVerifiedAt: Date | null; blockedAt: Date | null; deactivatedAt: Date | null }[]>`
+        SELECT id, "emailVerifiedAt", "blockedAt", "deactivatedAt" FROM "Account"
+        WHERE id IN (${accountId}, ${service.sitterProfile.accountId}) ORDER BY id FOR SHARE`;
+      if (participants.length !== 2 || participants.some(account => account.blockedAt || account.deactivatedAt || !account.emailVerifiedAt))
+        throw new AppError(409, "One of the booking participants is unavailable", "ACCOUNT_UNAVAILABLE");
+      const slotMinutes = (slot.endsAt.getTime() - slot.startsAt.getTime()) / 60_000;
+      if (slotMinutes < service.durationMinutes) {
+        throw new AppError(409, "Availability slot is too short for this service", "SLOT_TOO_SHORT");
+      }
+      const startsAt = input.startsAt ?? slot.startsAt;
+      const endsAt = new Date(startsAt.getTime() + service.durationMinutes * 60_000);
+      if (startsAt < slot.startsAt || startsAt <= new Date() || endsAt > slot.endsAt) {
+        throw new AppError(409, "Selected time does not fit the available slot", "SLOT_UNAVAILABLE");
+      }
+      const expiresAt = new Date(Math.min(startsAt.getTime(), Date.now() + env.BOOKING_REQUEST_TTL_HOURS * 3_600_000));
+
       const booking = await tx.booking.create({
         data: {
           ownerAccountId: accountId,
@@ -53,6 +68,9 @@ export async function createBooking(
           sitterServiceId: service.id,
           availabilitySlotId: slot.id,
           activeSlotKey: slot.id,
+          startsAt,
+          endsAt,
+          expiresAt,
           priceCents: service.priceCents,
           currency: "PLN",
           note: input.note
@@ -71,7 +89,7 @@ export async function createBooking(
       return booking;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2004", "P2034"].includes(error.code)) {
       throw new AppError(409, "Availability slot is already booked", "SLOT_ALREADY_BOOKED");
     }
     throw error;
@@ -84,6 +102,7 @@ export async function listBookings(
   input: { perspective: "owner" | "sitter" | "all"; status?: BookingStatus; page: number; pageSize: number }
 ) {
   requireUser(role);
+  await expireBookingRequests();
   const participantFilter: Prisma.BookingWhereInput =
     input.perspective === "owner"
       ? { ownerAccountId: accountId }
@@ -106,6 +125,7 @@ export async function listBookings(
 
 export async function getBooking(accountId: string, role: AccountRole, bookingId: string) {
   requireUser(role);
+  await expireBookingRequests();
   const booking = await prisma.booking.findFirst({
     where: { id: bookingId, OR: [{ ownerAccountId: accountId }, { sitterAccountId: accountId }] },
     include: bookingInclude
@@ -115,20 +135,20 @@ export async function getBooking(accountId: string, role: AccountRole, bookingId
 }
 
 function assertStatusTransition(
-  booking: { status: BookingStatus; ownerAccountId: string; sitterAccountId: string; availabilitySlot: { endsAt: Date } },
+  booking: { status: BookingStatus; ownerAccountId: string; sitterAccountId: string; startsAt: Date; endsAt: Date; expiresAt: Date },
   accountId: string,
   target: BookingStatus
 ) {
   const isOwner = booking.ownerAccountId === accountId;
   const isSitter = booking.sitterAccountId === accountId;
   const allowed =
-    (isSitter && booking.status === "REQUESTED" && ["ACCEPTED", "REJECTED"].includes(target)) ||
+    (isSitter && booking.status === "REQUESTED" && booking.startsAt > new Date() && booking.expiresAt > new Date() && ["ACCEPTED", "REJECTED"].includes(target)) ||
     ((isOwner || isSitter) && ["REQUESTED", "ACCEPTED"].includes(booking.status) && target === "CANCELLED") ||
-    (isSitter && booking.status === "ACCEPTED" && target === "COMPLETED" && booking.availabilitySlot.endsAt <= new Date());
+    (isSitter && booking.status === "ACCEPTED" && target === "COMPLETED" && booking.endsAt <= new Date());
   if (!allowed) throw new AppError(409, "Booking status transition is not allowed", "INVALID_BOOKING_TRANSITION");
 }
 
-const notificationForStatus: Record<Exclude<BookingStatus, "REQUESTED">, { type: NotificationType; title: string }> = {
+const notificationForStatus: Record<Exclude<BookingStatus, "REQUESTED" | "EXPIRED">, { type: NotificationType; title: string }> = {
   ACCEPTED: { type: "BOOKING_ACCEPTED", title: "Rezerwacja zaakceptowana" },
   REJECTED: { type: "BOOKING_REJECTED", title: "Rezerwacja odrzucona" },
   CANCELLED: { type: "BOOKING_CANCELLED", title: "Rezerwacja anulowana" },
@@ -139,8 +159,9 @@ export async function updateBookingStatus(
   accountId: string,
   role: AccountRole,
   bookingId: string,
-  target: Exclude<BookingStatus, "REQUESTED">
+  target: Exclude<BookingStatus, "REQUESTED" | "EXPIRED">
 ) {
+  if (target === "ACCEPTED") await requireVerifiedEmail(accountId);
   const booking = await getBooking(accountId, role, bookingId);
   assertStatusTransition(booking, accountId, target);
   const recipientId = booking.ownerAccountId === accountId ? booking.sitterAccountId : booking.ownerAccountId;
@@ -148,7 +169,7 @@ export async function updateBookingStatus(
 
   return prisma.$transaction(async (tx) => {
     const changed = await tx.booking.updateMany({
-      where: { id: booking.id, status: booking.status },
+      where: { id: booking.id, status: booking.status, ...(target === "ACCEPTED" ? { startsAt: { gt: new Date() }, expiresAt: { gt: new Date() } } : {}) },
       data: {
         status: target,
         activeSlotKey: ["REJECTED", "CANCELLED", "COMPLETED"].includes(target) ? null : booking.availabilitySlotId

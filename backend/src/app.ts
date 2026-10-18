@@ -9,6 +9,7 @@ import { openApiSpec } from "./docs/openapi";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { requestContext } from "./middleware/request-context";
 import { apiRouter } from "./routes";
+import { collectMetrics, metrics } from "./middleware/metrics";
 
 const app = express();
 
@@ -34,6 +35,8 @@ const corsOrigin: cors.CorsOptions["origin"] =
 
 app.use(helmet());
 app.use(requestContext);
+app.use(collectMetrics);
+app.get("/metrics", metrics);
 app.use(
   cors({
     origin: corsOrigin,

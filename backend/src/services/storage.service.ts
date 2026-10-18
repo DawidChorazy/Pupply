@@ -2,6 +2,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -10,6 +11,7 @@ import crypto from "node:crypto";
 
 import { env } from "../config/env";
 import { AppError } from "../utils/app-error";
+import { prisma } from "../config/prisma";
 
 const storageConfigured = Boolean(
   env.S3_ENDPOINT && env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
@@ -97,11 +99,66 @@ export async function getPetPhotoUrl(photoKey: string | null) {
     return `${env.S3_PUBLIC_BASE_URL.replace(/\/$/, "")}/${encodedKey}`;
   }
   const { client: s3, bucket } = getStorage();
-  return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: photoKey }), { expiresIn: 3600 });
+  return getSignedUrl(uploadClient ?? s3, new GetObjectCommand({ Bucket: bucket, Key: photoKey }), { expiresIn: 3600 });
 }
 
 export async function deletePetPhoto(photoKey: string | null) {
   if (!photoKey || !storageConfigured) return;
   const { client: s3, bucket } = getStorage();
   await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: photoKey }));
+}
+
+export async function createDocumentUpload(objectKey: string, sizeBytes: number) {
+  getStorage();
+  if (sizeBytes > env.DOCUMENT_MAX_BYTES) throw new AppError(413, "PDF is too large", "DOCUMENT_TOO_LARGE");
+  const uploadUrl = await getSignedUrl(uploadClient!, new PutObjectCommand({
+    Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey, ContentType: "application/pdf", ContentLength: sizeBytes
+  }), { expiresIn: 600 });
+  return { uploadUrl, expiresIn: 600 };
+}
+
+export async function assertDocumentUploaded(objectKey: string, sizeBytes: number) {
+  const { client: s3 } = getStorage();
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey }));
+    if (head.ContentLength !== sizeBytes || head.ContentType !== "application/pdf") throw new Error("Invalid PDF metadata");
+    const object = await s3.send(new GetObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey, Range: "bytes=0-4" }));
+    if (!object.Body || Buffer.from(await object.Body.transformToByteArray()).toString() !== "%PDF-") throw new Error("Invalid PDF signature");
+  } catch {
+    throw new AppError(400, "PDF upload is missing or invalid", "INVALID_DOCUMENT_UPLOAD");
+  }
+}
+
+export async function getDocumentUrl(objectKey: string, expiresIn = 300) {
+  getStorage();
+  return getSignedUrl(uploadClient!, new GetObjectCommand({
+    Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey,
+    ResponseContentType: "application/pdf", ResponseContentDisposition: "attachment"
+  }), { expiresIn });
+}
+
+export async function deleteDocumentObject(objectKey: string) {
+  const { client: s3 } = getStorage();
+  await s3.send(new DeleteObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey }));
+}
+
+export async function cleanupOrphanedObjects(now = new Date()) {
+  if (!storageConfigured) return;
+  const { client: s3, bucket } = getStorage();
+  const cutoff = now.getTime() - 86_400_000;
+  for (const [targetBucket, prefix] of [[bucket, "pets/"], [bucket, "sitters/"], [env.S3_DOCUMENT_BUCKET, "documents/"]] as const) {
+    let token: string | undefined;
+    do {
+      const page = await s3.send(new ListObjectsV2Command({ Bucket: targetBucket, Prefix: prefix, ContinuationToken: token, MaxKeys: 100 }));
+      for (const object of page.Contents ?? []) {
+        if (!object.Key || !object.LastModified || object.LastModified.getTime() > cutoff) continue;
+        const referenced = prefix === "documents/"
+          ? await prisma.petDocument.count({ where: { objectKey: object.Key } })
+          : prefix === "pets/" ? await prisma.pet.count({ where: { photoKey: object.Key } })
+            : await prisma.sitterProfile.count({ where: { photoKey: object.Key } });
+        if (!referenced) await s3.send(new DeleteObjectCommand({ Bucket: targetBucket, Key: object.Key }));
+      }
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token);
+  }
 }

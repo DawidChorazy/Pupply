@@ -3,7 +3,7 @@ import { useFocusEffect } from "expo-router/react-navigation";
 import { useCallback } from "react";
 
 export function useWalksList() {
-  const { walks, isLoading, refreshWalks, bookWalk } = useWalksContext();
+  const { walks, isLoading, refreshWalks, error } = useWalksContext();
 
   useFocusEffect(
     useCallback(() => {
@@ -15,6 +15,6 @@ export function useWalksList() {
     walks,
     isLoading,
     refreshWalks,
-    bookWalk
+    error
   };
 }

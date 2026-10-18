@@ -7,11 +7,11 @@ import { BottomMenu } from "@/features/navigation/BottomMenu";
 import { usePetsList } from "@/features/pets/usePetsList";
 import { useWalksList } from "@/features/walks/useWalksList";
 import { router } from "expo-router";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 
 export default function MainScreen() {
   const { pets, isLoading, error } = usePetsList();
-  const { walks } = useWalksList();
+  const { walks, error: walksError, refreshWalks } = useWalksList();
   const openCaregivers = () => router.push("/marketplace/sitters" as never);
 
   return (
@@ -51,6 +51,7 @@ export default function MainScreen() {
           onOpenPet={(petId) => router.push(`../mainScreen/pets/${petId}`)}
         />
 
+        {walksError ? <TouchableOpacity onPress={() => void refreshWalks()}><Text>{walksError} · Spróbuj ponownie</Text></TouchableOpacity> : null}
         <WalksCard
           walks={walks}
           onBookWalk={openCaregivers}

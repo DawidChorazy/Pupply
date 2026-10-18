@@ -5,7 +5,7 @@ import { env } from "../config/env";
 import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
 import { hashPassword, verifyPassword } from "../utils/password";
-import { sendAccountActionEmail } from "./mail.service";
+import { assertMailAvailable, sendAccountActionEmail } from "./mail.service";
 import {
   createOpaqueToken,
   createRefreshTokenId,
@@ -98,9 +98,11 @@ async function issueTokenPair(
   options: { familyId?: string; client?: Prisma.TransactionClient } = {}
 ) {
   const client = options.client ?? prisma;
-  const accessToken = signAccessToken(accountId, role);
+  const current = await client.account.findUniqueOrThrow({ where: { id: accountId }, select: { authVersion: true, blockedAt: true, deactivatedAt: true } });
+  if (current.blockedAt || current.deactivatedAt) throw new AppError(401, "Konto jest nieaktywne", "ACCOUNT_INACTIVE");
   const refreshTokenId = createRefreshTokenId();
   const familyId = options.familyId ?? createRefreshTokenId();
+  const accessToken = signAccessToken(accountId, role, current.authVersion, familyId);
   const refreshToken = signRefreshToken(accountId, role, refreshTokenId);
 
   await client.refreshToken.create({
@@ -446,14 +448,16 @@ export async function logout(input: RefreshInput) {
       where: { familyId: token.familyId, revokedAt: null },
       data: { revokedAt: new Date() }
     });
+    await prisma.pushDevice.deleteMany({ where: { accountId: payload.accountId, sessionId: token.familyId } });
   }
 }
 
 export async function logoutAll(accountId: string) {
-  await prisma.refreshToken.updateMany({
-    where: { accountId, revokedAt: null },
-    data: { revokedAt: new Date() }
-  });
+  await prisma.$transaction([
+    prisma.account.update({ where: { id: accountId }, data: { authVersion: { increment: 1 } } }),
+    prisma.pushDevice.deleteMany({ where: { accountId } }),
+    prisma.refreshToken.updateMany({ where: { accountId, revokedAt: null }, data: { revokedAt: new Date() } })
+  ]);
 }
 
 async function createAccountActionToken(accountId: string, type: AccountTokenType) {
@@ -479,12 +483,13 @@ async function createAccountActionToken(accountId: string, type: AccountTokenTyp
 }
 
 export async function requestPasswordReset(email: string) {
+  assertMailAvailable();
   const account = await prisma.account.findUnique({ where: { email } });
   if (!account || !account.passwordHash) return {};
 
   const token = await createAccountActionToken(account.id, "PASSWORD_RESET");
-  await sendAccountActionEmail(account.email, "password-reset", token);
-  return env.NODE_ENV === "production" ? {} : { debugToken: token };
+  const delivered = await sendAccountActionEmail(account.email, "password-reset", token);
+  return env.NODE_ENV === "production" ? {} : { debugToken: token, delivered };
 }
 
 export async function resetPassword(token: string, password: string) {
@@ -509,7 +514,7 @@ export async function resetPassword(token: string, password: string) {
     if (consumed.count !== 1) {
       throw new AppError(400, "Password reset token is invalid or expired", "INVALID_ACTION_TOKEN");
     }
-    await tx.account.update({ where: { id: record.accountId }, data: { passwordHash } });
+    await tx.account.update({ where: { id: record.accountId }, data: { passwordHash, authVersion: { increment: 1 } } });
     await tx.refreshToken.updateMany({
       where: { accountId: record.accountId, revokedAt: null },
       data: { revokedAt: new Date() }
@@ -518,13 +523,14 @@ export async function resetPassword(token: string, password: string) {
 }
 
 export async function requestEmailVerification(accountId: string) {
+  assertMailAvailable();
   const account = await prisma.account.findUnique({ where: { id: accountId } });
   if (!account) throw new AppError(404, "Account was not found", "ACCOUNT_NOT_FOUND");
   if (account.emailVerifiedAt) return {};
 
   const token = await createAccountActionToken(account.id, "EMAIL_VERIFICATION");
-  await sendAccountActionEmail(account.email, "email-verification", token);
-  return env.NODE_ENV === "production" ? {} : { debugToken: token };
+  const delivered = await sendAccountActionEmail(account.email, "email-verification", token);
+  return env.NODE_ENV === "production" ? {} : { debugToken: token, delivered };
 }
 
 export async function confirmEmailVerification(token: string) {

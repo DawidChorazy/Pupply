@@ -1,11 +1,34 @@
 import { useGamification } from "@/features/gamification/GamificationContext";
 import { BottomMenu } from "@/features/navigation/BottomMenu";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useCallback } from "react";
+import { router, useFocusEffect } from "expo-router";
 import { Text } from "expo-router/react-navigation";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View
+} from "react-native";
 
 export default function QuestsScreen() {
-  const { quests, userPoints, claimQuest } = useGamification();
+  const {
+    questState,
+    questsLoading,
+    questsError,
+    claimError,
+    claimingId,
+    claimQuest,
+    refreshQuests
+  } = useGamification();
+  useFocusEffect(
+    useCallback(() => {
+      void refreshQuests();
+    }, [refreshQuests])
+  );
+  const quests = questState?.quests ?? [];
 
   return (
     <View style={styles.shell}>
@@ -13,17 +36,62 @@ export default function QuestsScreen() {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={questsLoading}
+            onRefresh={() => void refreshQuests()}
+          />
+        }
       >
         <View style={styles.header}>
           <Text style={styles.eyebrow}>Questy</Text>
           <Text style={styles.title}>Zadania za punkty</Text>
-          <Text style={styles.subtitle}>Zdobywaj punkty za opiekę, zdrowie i aktywność pupila.</Text>
+          <Text style={styles.subtitle}>
+            Wykonuj zadania i odbieraj nagrody. Każdą nagrodę można odebrać raz
+            na konto.
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => void refreshQuests()}
+            disabled={questsLoading || claimingId !== null}
+          >
+            <Text style={[styles.rewardText, { marginTop: 12 }]}>
+              {questsLoading ? "Odświeżanie…" : "Odśwież zadania"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.pointsCard}>
-          <Text style={styles.pointsLabel}>Aktualny wynik</Text>
-          <Text style={styles.pointsValue}>{userPoints} pkt</Text>
-        </View>
+        {questsLoading && !questState ? (
+          <ActivityIndicator color="#D35400" />
+        ) : null}
+        {questsError ? (
+          <View style={styles.questCard}>
+            <Text style={styles.questTitle}>{questsError}</Text>
+            <TouchableOpacity
+              onPress={() => void refreshQuests()}
+              accessibilityRole="button"
+            >
+              <Text style={styles.rewardText}>Spróbuj ponownie</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {claimError ? (
+          <Text
+            style={[
+              styles.questDescription,
+              { color: "#B42318", marginBottom: 12 }
+            ]}
+            accessibilityRole="alert"
+          >
+            {claimError}
+          </Text>
+        ) : null}
+        {questState ? (
+          <View style={styles.pointsCard}>
+            <Text style={styles.pointsLabel}>Aktualny wynik</Text>
+            <Text style={styles.pointsValue}>{questState.userPoints} pkt</Text>
+          </View>
+        ) : null}
 
         <View style={styles.list}>
           {quests.map((quest) => {
@@ -31,21 +99,60 @@ export default function QuestsScreen() {
             const isLocked = quest.status === "locked";
 
             return (
-              <View key={quest.id} style={[styles.questCard, isClaimed && styles.questCardClaimed]}>
+              <View
+                key={quest.id}
+                style={[styles.questCard, isClaimed && styles.questCardClaimed]}
+              >
                 <View style={styles.questHeader}>
                   <View style={styles.questIcon}>
-                    <MaterialCommunityIcons name={quest.icon} size={24} color="#D35400" />
+                    <MaterialCommunityIcons
+                      name={quest.icon}
+                      size={24}
+                      color="#D35400"
+                    />
                   </View>
 
                   <View style={styles.questCopy}>
                     <Text style={styles.questTitle}>{quest.title}</Text>
-                    <Text style={styles.questDescription}>{quest.description}</Text>
+                    <Text style={styles.questDescription}>
+                      {quest.description}
+                    </Text>
                   </View>
                 </View>
 
+                <Text style={[styles.questDescription, { marginBottom: 12 }]}>
+                  Postęp: {quest.progress}/{quest.target}
+                  {isClaimed ? " · Nagroda odebrana" : ""}
+                </Text>
+                {isLocked ? (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push(
+                        quest.id === "first-pet"
+                          ? "/mainScreen/AddDogScreen"
+                          : quest.id === "profile-complete"
+                            ? "/mainScreen/ProfileScreen"
+                            : "/marketplace/bookings"
+                      )
+                    }
+                  >
+                    <Text style={[styles.rewardText, { marginBottom: 14 }]}>
+                      {quest.id === "first-pet"
+                        ? "Dodaj pupila"
+                        : quest.id === "profile-complete"
+                          ? "Przejdź do pupili"
+                          : "Zobacz rezerwacje"}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.questFooter}>
                   <View style={styles.rewardPill}>
-                    <MaterialCommunityIcons name="star-four-points-outline" size={15} color="#D35400" />
+                    <MaterialCommunityIcons
+                      name="star-four-points-outline"
+                      size={15}
+                      color="#D35400"
+                    />
                     <Text style={styles.rewardText}>+{quest.points} pkt</Text>
                   </View>
 
@@ -56,11 +163,23 @@ export default function QuestsScreen() {
                       isLocked && styles.claimButtonLocked
                     ]}
                     activeOpacity={0.85}
-                    disabled={isClaimed || isLocked}
-                    onPress={() => claimQuest(quest.id)}
+                    disabled={
+                      isClaimed ||
+                      isLocked ||
+                      claimingId !== null ||
+                      questsLoading
+                    }
+                    onPress={() => void claimQuest(quest.id)}
+                    accessibilityRole="button"
                   >
                     <Text style={styles.claimButtonText}>
-                      {isClaimed ? "Odebrane" : isLocked ? "Zablokowane" : "Odbierz"}
+                      {claimingId === quest.id
+                        ? "Odbieranie…"
+                        : isClaimed
+                          ? "Odebrane"
+                          : isLocked
+                            ? "W trakcie"
+                            : "Odbierz"}
                     </Text>
                   </TouchableOpacity>
                 </View>

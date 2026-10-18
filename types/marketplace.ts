@@ -1,5 +1,5 @@
 export type SitterServiceType = "DOG_WALK" | "DROP_IN" | "DAY_CARE";
-export type BookingStatus = "REQUESTED" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED";
+export type BookingStatus = "REQUESTED" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "EXPIRED";
 export type BookingPerspective = "owner" | "sitter" | "all";
 
 export interface Pagination {
@@ -99,6 +99,9 @@ export interface Booking {
   sitterServiceId: string;
   availabilitySlotId: string;
   status: BookingStatus;
+  startsAt: string;
+  endsAt: string;
+  expiresAt: string;
   priceCents: number;
   currency: "PLN";
   note: string | null;
@@ -115,6 +118,7 @@ export interface CreateBookingPayload {
   petId: string;
   sitterServiceId: string;
   availabilitySlotId: string;
+  startsAt?: string;
   note?: string;
 }
 

@@ -210,6 +210,7 @@ export default function HomeScreen()  {
                 </TouchableOpacity>
               )}
 
+              <TouchableOpacity onPress={() => router.push("/reset-password" as never)}><Text style={styles.googleButtonText}>Nie pamiętam hasła</Text></TouchableOpacity>
               <TouchableOpacity 
                 style={styles.loginButton}
                 activeOpacity={0.8}

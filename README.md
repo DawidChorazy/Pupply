@@ -21,6 +21,7 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend marketplace opiek
 - Rezerwacje spacerow i opieki: /api/bookings
 - Powiadomienia: /api/notifications
 - Podpisane uploady zdjec: POST /api/uploads/pet-photo
+- Udostępnianie karty pupila: link bez logowania, ważny 7 dni, z możliwością cofnięcia i opcjonalnymi PDF-ami
 - Healthcheck backendu: GET /api/health
 - Readiness bazy: GET /api/ready
 - Swagger UI: GET /docs
@@ -57,6 +58,7 @@ Po starcie dostępne są:
 - backend: http://localhost:4000/api/ready
 - Swagger UI: http://localhost:4000/docs
 - panel MinIO: http://localhost:9001
+- lokalna skrzynka e-mail Mailpit: http://localhost:8025
 
 Zatrzymanie aplikacji:
 
@@ -154,6 +156,112 @@ Po aktualizacji zastosuj migracje (`npx prisma migrate deploy` w `backend`) oraz
 ## Poza zakresem obecnego MVP
 
 - Platnosci online
-- Czat i powiadomienia push
+- Czat
 - Oceny opiekunow
 - Pelny modul obslugi klinik
+
+## Questy i ranking
+
+Questy są weryfikowane przez backend, a odebrane nagrody zapisywane w `QuestClaim`.
+Każdy quest można odebrać raz na konto; ponowienie żądania i równoczesne kliknięcia nie naliczają punktów ponownie.
+
+- Pierwszy pupil: 50 pkt za posiadanie pupila.
+- Pełny profil pupila: 75 pkt za imię, wiek, rasę, dodatnią wagę i kontakt do weterynarza u jednego pupila. Brak alergii nie blokuje zadania.
+- Pierwszy zakończony spacer: 90 pkt za rezerwację `DOG_WALK` w stanie `COMPLETED` po stronie właściciela.
+- Regularna opieka: 300 pkt za 5 zakończonych rezerwacji właściciela, niezależnie od rodzaju usługi.
+
+Istniejące dane konta również liczą się do postępu. Nagrody nie są odbierane po usunięciu pupila; punkty z wcześniejszej makiety nie są przenoszone. Dokumenty PDF nie naliczają punktów; questy spacerów bazują na zakończonych rezerwacjach backendu.
+
+Ranking jest ogólny, bez resetów: pokazuje 50 pierwszych kont użytkowników oraz własne miejsce także poza tą listą. Remisy mają wspólne miejsce (1, 1, 3). Wyświetlane są imię i inicjał nazwiska, bez danych kontaktowych. Nowe konta zaczynają od 0 pkt.
+
+API (wymaga zalogowanego konta `USER`): `GET /api/gamification/quests`, `POST /api/gamification/quests/:questId/claim`, `GET /api/gamification/leaderboard`. Kontrakty są dostępne w Swaggerze. Po aktualizacji uruchom migracje i wygeneruj klienta Prisma, następnie zrestartuj backend.
+
+## Rezerwacje, dokumenty i bezpieczeństwo kont
+
+Główne ekrany spacerów i marketplace korzystają teraz z tego samego API rezerwacji. Ekran główny pokazuje prawdziwe rezerwacje `DOG_WALK`, a szczegóły pobierają aktualny status z serwera. Mapa i etapy spaceru nie są już symulowane w tym przepływie; rzeczywiste śledzenie GPS pozostaje osobnym rozszerzeniem.
+
+Rezerwacja zapisuje własne `startsAt`, `endsAt` i `expiresAt`. Parametr `startsAt` jest opcjonalny przy tworzeniu rezerwacji; bez niego używany jest początek slotu. Wyszukiwarka zwraca wolne fragmenty dostępności, więc kilka fragmentów może mieć ten sam identyfikator slotu. Klient musi przekazać również wybrany `startsAt`. Godzinna usługa rezerwuje godzinę, a reszta przedziału pozostaje dostępna. PostgreSQL blokuje nakładające się terminy opiekuna i pupila; sąsiednie przedziały są dozwolone.
+
+Prośby `REQUESTED` wygasają po 24 godzinach lub z chwilą rozpoczęcia terminu, zależnie od tego, co nastąpi wcześniej. Ustawienie `BOOKING_REQUEST_TTL_HOURS` zmienia ten limit dla nowych rezerwacji. Status `EXPIRED` ustawia serwer; obie strony otrzymują powiadomienie. Opiekun może zakończyć zaakceptowaną rezerwację dopiero po jej własnym `endsAt`.
+
+Dokumenty medyczne są zapisane w PostgreSQL i prywatnym buckecie `S3_DOCUMENT_BUCKET` (domyślnie `pupply-documents`). Ten bucket musi być inny niż publiczny bucket zdjęć i nie może mieć publicznego odczytu. Compose tworzy go z prywatną polityką. Upload obejmuje przygotowanie URL-a, wysłanie PDF-a i potwierdzenie pliku; serwer sprawdza rozmiar, typ oraz sygnaturę `%PDF-`. Pobieranie wymaga uprawnień właściciela i zwraca podpisany URL ważny przez 5 minut. Daty ważności w API mają format `RRRR-MM-DD`, w formularzu `DD.MM.RRRR`. Nie ma migracji dokumentów przechowywanych wcześniej wyłącznie w pamięci przeglądarki.
+
+Reset hasła jest dostępny pod `/reset-password`, potwierdzanie adresu pod `/verify-email`, a ustawienia konta pod `/account-settings`. Rezerwowanie i oferowanie opieki wymagają potwierdzonego e-maila. W lokalnym Docker Compose wiadomości trafiają do **Mailpit: http://localhost:8025**; nie są wysyłane do zewnętrznych odbiorców. Przy dostępie z telefonu `APP_PUBLIC_URL` musi wskazywać adres aplikacji dostępny z telefonu. W publicznym wdrożeniu zastąp Mailpit własnym SMTP, ustaw `SMTP_HOST`, `SMTP_PORT`, dane logowania oraz poprawny `SMTP_FROM`; skrzynka Mailpit służy do developmentu. Bez SMTP produkcyjne operacje e-mailowe zwracają `503 MAIL_UNAVAILABLE`. W trybie development/test API dodatkowo zwraca `debugToken` i informację `delivered`.
+
+Zmiana hasła, potwierdzona zmiana e-maila, wylogowanie ze wszystkich urządzeń i blokada konta natychmiast unieważniają sesje. Zmiana e-maila wymaga obecnego hasła i potwierdzenia nowego adresu; odłącza też poprzednie powiązanie z Google. Dla kont korzystających wyłącznie z Google zmiana hasła/adresu tym formularzem nie jest dostępna. Dezaktywacja zachowuje historię, ukrywa profil opiekuna i anuluje aktywne rezerwacje. To dezaktywacja, a nie trwałe usunięcie danych.
+
+Administrator może blokować i przywracać konta przez `/api/admin/accounts/:accountId/state` oraz czytać `/api/admin/audit`. Operacje mają historię z aktorem, czasem i uzasadnieniem. Nie ma publicznej rejestracji administratorów. Uprawnienia nadaje operator dedykowanemu, aktywnemu kontu ze zweryfikowanym adresem:
+
+```sh
+npm --prefix backend run admin:grant -- administrator@example.com
+```
+
+## Migracje i testy
+
+Po aktualizacji zastosuj migracje i wygeneruj klienta Prisma:
+
+```sh
+cd backend
+npx prisma migrate deploy
+npm run prisma:generate
+```
+
+Migracja wymaga rozszerzenia PostgreSQL `btree_gist`. Przy istniejących nakładających się dostępnościach migracja przerwie się zamiast usuwać dane. Przed wdrożeniem sprawdź kolizje:
+
+```sql
+SELECT a.id, b.id, a."sitterProfileId"
+FROM "AvailabilitySlot" a JOIN "AvailabilitySlot" b
+  ON a."sitterProfileId" = b."sitterProfileId" AND a.id < b.id
+  AND a."startsAt" < b."endsAt" AND b."startsAt" < a."endsAt";
+```
+
+Rozwiąż znalezione konflikty terminów wraz z powiązanymi rezerwacjami przed ponowieniem migracji. Nie uruchamiaj migracji testowych na bazie używanej przez aplikację.
+
+Testy ładują **`backend/.env.test`**, a nie deweloperski `backend/.env`. Skopiuj `.env.test.example`, ustaw osobną bazę o nazwie `test` lub kończącej się `_test`, a następnie zastosuj do niej migracje z odpowiednim `DATABASE_URL`. Strażnik blokuje testy, jeśli nazwa bazy lub `NODE_ENV` są nieprawidłowe. Pełny zestaw nadal czyści dane w bazie testowej. CI tworzy osobną bazę oraz publiczny bucket zdjęć i prywatny bucket dokumentów.
+
+```sh
+npm --prefix backend test
+node tests/profile-validation.test.cjs
+```
+
+## Udostępnianie karty pupila
+
+W szczegółach pupila wybierz „Udostępnij kartę pupila”. Nadaj opcjonalną nazwę (widoczną tylko na liście właściciela), zdecyduj o dokumentach PDF i utwórz link. Skopiuj go na tym ekranie; później lista pokazuje metadane i pozwala cofnąć dostęp, ale nie odtwarza tajnego linku. Każdy link wygasa po 7 dniach. Można mieć do 20 aktywnych linków dla jednego pupila.
+
+Odbiorca otwiera `/shared-pet#token=…` bez konta. Widzi aktualne zdjęcie, dane podstawowe, historię chorób, alergie, szczepienia, weterynarza i notatki. Nie widzi konta właściciela i nie uzyskuje możliwości edycji. PDF-y są domyślnie wyłączone; po włączeniu obejmują wszystkie ukończone dokumenty pupila, również dodane później. Osoba posiadająca link może przekazać go dalej.
+
+W bazie jest wyłącznie skrót SHA-256 losowego tokenu. Fragment adresu nie trafia do serwera strony; klient przesyła token do API nagłówkiem `X-Pet-Share-Token`, bez zapisywania go w localStorage. Publiczny ekran ma politykę `no-referrer` i zakaz indeksowania; odpowiedzi API nie są cache'owane. Cofnięty lub wygasły link i nieaktywne konto właściciela powodują jednakowe `404`. Otwarta karta odświeża uprawnienia co 30 sekund i po powrocie na ekran. Po wygaśnięciu usuwa wyświetlane dane. Zdjęcia korzystają z dotychczasowego storage zdjęć; udostępnienie nie zmienia polityk bucketów.
+
+API właściciela: `GET/POST /api/pets/:petId/shares`, `DELETE /api/pets/:petId/shares/:shareId`. Publiczny odczyt: `GET /api/shared-pets/card` i `GET /api/shared-pets/documents/:documentId/download`. Pobranie PDF-u wymaga aktywnego linku z dokumentami i dokumentu należącego do tego pupila. Podpisany URL prywatnego PDF-u działa do 60 sekund, maksymalnie do końca ważności linku. Cofnięcie blokuje kolejne pobrania; wcześniej wydany URL może działać do końca swojego krótkiego terminu, a zapisanych kopii nie można usunąć z urządzenia odbiorcy.
+
+`APP_PUBLIC_URL` musi wskazywać adres frontendu dostępny dla odbiorcy. W lokalnym środowisku adres LAN działa w tej samej sieci; po wdrożeniu ustaw publiczną domenę HTTPS, poprawny `EXPO_PUBLIC_API_URL`, `CORS_ORIGIN` i dostępny z zewnątrz endpoint storage. Zastosuj migrację `20261018150000_pet_sharing` i wygeneruj klienta Prisma.
+
+## Powiadomienia i zadania okresowe
+
+Backend co 60 sekund wygasza prośby, tworzy przypomnienia dokumentów, wysyła kolejkę powiadomień i sprząta stare tokeny. Interwał ustawia `MAINTENANCE_INTERVAL_SECONDS`. Nieprzypisane pliki starsze niż dobę są sprzątane co godzinę. Powiadomienie o ważności dokumentu jest tworzone raz dla danej konfiguracji daty i wyprzedzenia; zmiana tych ustawień pozwala utworzyć nowe przypomnienie.
+
+Powiadomienia e-mail są domyślnie wyłączone; użytkownik włącza je w ustawieniach konta. Kolejka jest trwała, używa blokad czasowych i ponawia nieudane wysyłki do 8 razy z rosnącym opóźnieniem. Wysyłka ma semantykę co najmniej raz: utrata potwierdzenia od dostawcy może spowodować powtórzenie wiadomości.
+
+Push wymaga `PUSH_ENABLED=true`, konfiguracji projektu EAS oraz poświadczeń FCM/APNs. Opcjonalny `EXPO_PUSH_ACCESS_TOKEN` włącza autoryzację do Expo Push Service. Aplikacja rejestruje token dopiero po wybraniu „Włącz push na tym telefonie” i zgodzie użytkownika. Po ponownym zalogowaniu włącz push dla nowej sesji; wylogowanie usuwa rejestrację tej sesji. Web i Expo Go nie obsługują tego przepływu. Dodanie `expo-notifications` wymaga przebudowania własnego klienta natywnego. Serwer sprawdza tickets/receipts i usuwa nieaktualne tokeny zgodnie z [dokumentacją Expo](https://docs.expo.dev/push-notifications/sending-notifications/). Treść push na ekranie blokady jest ogólna i nie zawiera danych medycznych.
+
+## Kopie zapasowe i monitoring
+
+Skrypty `ops/backup.sh` i `ops/restore.sh` obsługują PostgreSQL oraz oba buckety MinIO. Uruchamiaj je z katalogu projektu. Backup na czas zrzutu bazy i kopiowania plików zatrzymuje backend, a potem go uruchamia; frontend może w tym czasie zgłaszać brak połączenia. Wybierz nowy, bezwzględny katalog na każdą kopię:
+
+```sh
+ops/backup.sh /absolute/path/backups/2026-10-18
+# Odtwarzanie zastępuje bazę i przywraca pliki; wymaga świadomego wskazania flagi.
+ops/restore.sh /absolute/path/backups/2026-10-18 --confirm-restore
+```
+
+Dla Podmana ustaw `CONTAINER_ENGINE=podman` i zainstaluj provider Compose. Skrypty tworzą sumę kontrolną bazy i znacznik `COMPLETE`; nie odtwarzają nieukończonej kopii. Przechowuj kopie poza hostem aplikacji, z ograniczonym dostępem. Harmonogram można dodać w cron/systemd, np. raz dziennie; sprawdzaj kod zakończenia i cyklicznie ćwicz restore na osobnej instancji.
+
+Endpoint `/metrics` jest dostępny tylko po ustawieniu `METRICS_TOKEN` (minimum 32 znaki) i z nagłówkiem Bearer. Metryki obejmują żądania HTTP, błędy i pracę zadań okresowych. Opcjonalny Prometheus i reguły alertów:
+
+```sh
+mkdir -p .secrets
+# Zapisz losowy sekret w .secrets/metrics-token i ustaw tę samą wartość jako METRICS_TOKEN.
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+```
+
+Prometheus jest dostępny lokalnie pod http://localhost:9090. Reguły wykrywają niedostępność API, wzrost błędów 5xx, zatrzymanie zadań okresowych oraz opóźnienia i nieudane wysyłki powiadomień. Aby wysyłać alarmy poza Prometheusa, podłącz własny Alertmanager i odbiorcę; repozytorium nie zawiera danych zewnętrznych kanałów alertowania.

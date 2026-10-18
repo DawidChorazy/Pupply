@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   editorSubtitle: { color: "#77808C", fontSize: 13, textAlign: "center", lineHeight: 18, marginTop: 5, marginBottom: 22 },
   cropFrame: { width: "100%", maxWidth: 420, aspectRatio: 1, borderRadius: 22, overflow: "hidden", backgroundColor: "#E7E9EC" },
   cropImage: { position: "absolute" },
-  cropBorder: { ...StyleSheet.absoluteFillObject, pointerEvents: "none", borderWidth: 3, borderColor: "#FFFFFF", borderRadius: 22 },
+  cropBorder: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, pointerEvents: "none", borderWidth: 3, borderColor: "#FFFFFF", borderRadius: 22 },
   gridVerticalOne: { position: "absolute", pointerEvents: "none", top: 0, bottom: 0, left: "33.333%", width: 1, backgroundColor: "rgba(255,255,255,0.55)" },
   gridVerticalTwo: { position: "absolute", pointerEvents: "none", top: 0, bottom: 0, left: "66.666%", width: 1, backgroundColor: "rgba(255,255,255,0.55)" },
   gridHorizontalOne: { position: "absolute", pointerEvents: "none", left: 0, right: 0, top: "33.333%", height: 1, backgroundColor: "rgba(255,255,255,0.55)" },

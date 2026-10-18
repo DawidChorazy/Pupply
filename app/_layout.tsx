@@ -21,6 +21,11 @@ export default function RootLayout() {
         <PetsProvider>
           <WalksProvider>
             <Stack initialRouteName="index">
+              <Stack.Screen name="pet-sharing" options={{ headerShown: false }} />
+              <Stack.Screen name="shared-pet" options={{ headerShown: false }} />
+              <Stack.Screen name="account-settings" options={{ headerShown: false }} />
+              <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+              <Stack.Screen name="verify-email" options={{ headerShown: false }} />
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="mainScreen/MainScreen" options={{ headerShown: false }} />
               <Stack.Screen name="mainScreen/AddDogScreen" options={{ headerShown: false }} />

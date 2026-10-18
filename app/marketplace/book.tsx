@@ -12,7 +12,7 @@ import { Pet } from "@/types/pets";
 import { marketplaceStyles as styles } from "@/styles/marketplace";
 
 export default function BookScreen() {
-  const params = useLocalSearchParams<{ sitterName?: string; sitterServiceId?: string; availabilitySlotId?: string }>();
+  const params = useLocalSearchParams<{ sitterName?: string; sitterServiceId?: string; availabilitySlotId?: string; startsAt?: string }>();
   const [pets, setPets] = useState<Pet[]>([]);
   const [petId, setPetId] = useState("");
   const [note, setNote] = useState("");
@@ -48,6 +48,7 @@ export default function BookScreen() {
         petId,
         sitterServiceId: String(params.sitterServiceId),
         availabilitySlotId: String(params.availabilitySlotId),
+        startsAt: params.startsAt ? String(params.startsAt) : undefined,
         note: note.trim() || undefined
       });
       router.replace("/marketplace/bookings" as never);
@@ -79,7 +80,7 @@ export default function BookScreen() {
         <Text style={[styles.label, { marginTop: 18 }]}>Wiadomość do opiekuna</Text>
         <TextInput style={[styles.input, styles.textArea]} value={note} onChangeText={setNote} multiline maxLength={1000} placeholder="Ważne informacje, potrzeby pupila..." placeholderTextColor="#A98D7B" />
       </View>
-      {error ? <Text style={styles.statusError}>{error}</Text> : null}
+      {error ? <View><Text style={styles.statusError}>{error}</Text><TouchableOpacity onPress={() => router.push("/verify-email" as never)}><Text style={styles.secondaryButtonText}>Potwierdź e-mail</Text></TouchableOpacity></View> : null}
       <TouchableOpacity style={[styles.primaryButton, (isSubmitting || !pets.length) && styles.buttonDisabled]} disabled={isSubmitting || !pets.length} onPress={submit}>
         {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Wyślij prośbę o rezerwację</Text>}
       </TouchableOpacity>

@@ -1,7 +1,8 @@
+import { usePetsContext } from "@/features/pets/PetsContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "expo-router/react-navigation";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,7 +14,7 @@ import {
 } from "react-native";
 import { ApiError } from "@/services/api-client";
 import { getAccessToken } from "@/services/auth-storage";
-import { createPet } from "@/services/pets-service";
+import { createPet, updatePet } from "@/services/pets-service";
 import { uploadPetPhoto } from "@/services/uploads-service";
 import { PetGender } from "@/types/pets";
 import { addDogStyles as styles } from "@/features/home/styles";
@@ -78,6 +79,8 @@ const parseOptionalInt = (value: string) => {
 };
 
 export default function AddDogScreen() {
+  const { addPet, updatePetInList } = usePetsContext();
+  const createdPetId = useRef<string | null>(null);
   const [form, setForm] = useState<DogForm>(initialForm);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -187,8 +190,7 @@ export default function AddDogScreen() {
       const photoKey = pendingPhoto
         ? await uploadPetPhoto(pendingPhoto.uri, pendingPhoto.contentType)
         : undefined;
-      const response = await createPet(
-        {
+      const payload = {
           name: form.name.trim(),
           gender: form.gender,
           age,
@@ -200,10 +202,15 @@ export default function AddDogScreen() {
           vaccines: optionalText(form.vaccines),
           vet: optionalText(form.vet),
           notes: optionalText(form.notes)
-        },
-        accessToken
-      );
-      savePetDocuments(response.pet.id, documents);
+        };
+      const response = createdPetId.current
+        ? await updatePet(createdPetId.current, payload, accessToken)
+        : await createPet(payload, accessToken);
+      createdPetId.current = response.pet.id;
+      addPet(response.pet);
+      updatePetInList(response.pet);
+      await savePetDocuments(response.pet.id, documents);
+      createdPetId.current = null;
       setDocuments([]);
       setSuccess("Zwierzak został dodany");
       setForm(initialForm);

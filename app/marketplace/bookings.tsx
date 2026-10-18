@@ -15,6 +15,7 @@ const statusLabels: Record<BookingStatus, string> = {
   ACCEPTED: "Zaakceptowana",
   REJECTED: "Odrzucona",
   CANCELLED: "Anulowana",
+  EXPIRED: "Wygasła",
   COMPLETED: "Zakończona"
 };
 
@@ -41,7 +42,7 @@ export default function BookingsScreen() {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  const changeStatus = async (booking: Booking, status: Exclude<BookingStatus, "REQUESTED">) => {
+  const changeStatus = async (booking: Booking, status: Exclude<BookingStatus, "REQUESTED" | "EXPIRED">) => {
     setChangingId(booking.id);
     setError("");
     try {
@@ -66,7 +67,7 @@ export default function BookingsScreen() {
       {items.map((booking) => {
         const isSitter = accountId === booking.sitterAccountId;
         const canCancel = booking.status === "REQUESTED" || booking.status === "ACCEPTED";
-        const canComplete = isSitter && booking.status === "ACCEPTED" && new Date(booking.availabilitySlot.endsAt) <= new Date();
+        const canComplete = isSitter && booking.status === "ACCEPTED" && new Date(booking.endsAt) <= new Date();
         return (
           <View style={styles.card} key={booking.id}>
             <View style={styles.spaceBetween}>
@@ -74,7 +75,7 @@ export default function BookingsScreen() {
               <View style={styles.badge}><Text style={styles.badgeText}>{statusLabels[booking.status]}</Text></View>
             </View>
             <View style={styles.divider} />
-            <Text style={styles.body}>{new Date(booking.availabilitySlot.startsAt).toLocaleString("pl-PL")}</Text>
+            <Text style={styles.body}>{new Date(booking.startsAt).toLocaleString("pl-PL")}</Text>
             <Text style={styles.muted}>{booking.sitterService.durationMinutes} min • {(booking.priceCents / 100).toFixed(2)} zł</Text>
             {booking.note ? <Text style={[styles.body, { marginTop: 8 }]}>{booking.note}</Text> : null}
             {changingId === booking.id ? <ActivityIndicator style={{ marginTop: 12 }} color="#D35400" /> : (

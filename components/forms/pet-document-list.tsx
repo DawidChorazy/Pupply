@@ -1,5 +1,7 @@
+import { useState } from "react";
+import { getPetDocumentDownloadUrl } from "@/services/pet-documents-store";
 import type { PetDocument } from "@/types/pet-document";
-import { Platform, Text, View, TouchableOpacity, TextInput } from "react-native";
+import { Platform, Text, View, TouchableOpacity, TextInput, Linking } from "react-native";
 import { petDocumentListStyles as styles } from "@/styles/pet-document-list";
 import { getDocumentStatus } from "@/utils/document-date"
 
@@ -12,19 +14,27 @@ type PetDocumentListProps = {
 
 
 export function PetDocumentList({documents, onRemove, onExpiryChange, onReminderChange}: PetDocumentListProps){
+    const [error, setError] = useState("");
+    const openDocument = async (document: PetDocument) => {
+      setError("");
+      const tab = Platform.OS === "web" ? window.open("about:blank", "_blank") : null;
+      if (tab) tab.opener = null;
+      try {
+        const url = await getPetDocumentDownloadUrl(document);
+        if (tab) tab.location.href = url;
+        else await Linking.openURL(url);
+      } catch { tab?.close(); setError("Nie udało się otworzyć dokumentu. Spróbuj ponownie."); }
+    };
     return (
         <View>
+            {error ? <Text accessibilityRole="alert">{error}</Text> : null}
             {documents.length === 0 && (
                 <Text>Brak dokumentów</Text>
             )}
             {documents.map((document, index) => (
                 <View key = {`${document.uri}-${index}`}>
                     <TouchableOpacity
-                    onPress={() => {
-                        if(Platform.OS === "web"){
-                            window.open(document.uri, "_blank", "noopener,noreferrer")
-                        }
-                    }}>
+                    onPress={() => void openDocument(document)}>
                         <Text>{document.name} - Otwórz PDF</Text>
                     </TouchableOpacity>
                     <Text>{getDocumentStatus(

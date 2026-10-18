@@ -34,7 +34,7 @@ export function getBooking(bookingId: string) {
   return authenticatedApiRequest<{ booking: Booking }>(API_ENDPOINTS.bookings.detail(bookingId));
 }
 
-export function updateBookingStatus(bookingId: string, status: Exclude<BookingStatus, "REQUESTED">) {
+export function updateBookingStatus(bookingId: string, status: Exclude<BookingStatus, "REQUESTED" | "EXPIRED">) {
   return authenticatedApiRequest<{ booking: Booking }>(API_ENDPOINTS.bookings.status(bookingId), {
     method: "PATCH",
     body: JSON.stringify({ status })

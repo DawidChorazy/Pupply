@@ -78,7 +78,7 @@ export default function SittersScreen() {
     if (!service || !slot) return;
     router.push({
       pathname: "/marketplace/book" as never,
-      params: { sitterName: sitter.displayName, sitterServiceId: service.id, availabilitySlotId: slot.id }
+      params: { sitterName: sitter.displayName, sitterServiceId: service.id, availabilitySlotId: slot.id, startsAt: slot.startsAt }
     });
   };
 
