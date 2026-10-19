@@ -7,11 +7,13 @@ import { BottomMenu } from "@/features/navigation/BottomMenu";
 import { usePetsList } from "@/features/pets/usePetsList";
 import { useWalksList } from "@/features/walks/useWalksList";
 import { router } from "expo-router";
+import { useState} from "react";
 import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 
 export default function MainScreen() {
   const { pets, isLoading, error } = usePetsList();
   const { walks, error: walksError, refreshWalks } = useWalksList();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const openCaregivers = () => router.push("/marketplace/sitters" as never);
 
   return (
