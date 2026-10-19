@@ -1,3 +1,4 @@
+import { notifySessionChanged } from "./session-events";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
@@ -10,11 +11,15 @@ function hasWebStorage() {
 }
 
 export async function saveAuthTokens(accessToken: string, refreshToken: string, accountId?: string) {
+  const previousAccountId = await getAccountId();
+  const previousToken = await getAccessToken();
+  const changed = !previousToken || (accountId !== undefined && accountId !== previousAccountId);
   if (Platform.OS === "web") {
     if (hasWebStorage()) {
       window.localStorage.setItem(accessTokenKey, accessToken);
       window.localStorage.setItem(refreshTokenKey, refreshToken);
       if (accountId) window.localStorage.setItem(accountIdKey, accountId);
+      if (changed) notifySessionChanged();
     }
     return;
   }
@@ -22,6 +27,7 @@ export async function saveAuthTokens(accessToken: string, refreshToken: string, 
   await SecureStore.setItemAsync(accessTokenKey, accessToken);
   await SecureStore.setItemAsync(refreshTokenKey, refreshToken);
   if (accountId) await SecureStore.setItemAsync(accountIdKey, accountId);
+  if (changed) notifySessionChanged();
 }
 
 export async function getAccessToken() {
@@ -49,6 +55,7 @@ export async function getAccountId() {
 }
 
 export async function clearAuthTokens() {
+  notifySessionChanged();
   if (Platform.OS === "web") {
     if (hasWebStorage()) {
       window.localStorage.removeItem(accessTokenKey);

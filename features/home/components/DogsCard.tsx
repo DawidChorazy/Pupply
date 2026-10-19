@@ -1,6 +1,6 @@
 import { Pet } from "@/types/pets";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { Image } from "expo-image";
 import { ActivityIndicator, TouchableOpacity, View } from "react-native";
 
@@ -10,11 +10,12 @@ type DogsCardProps = {
   pets: Pet[];
   isLoading?: boolean;
   error?: string;
+  onRetry?: () => void;
   onAddDog?: () => void;
   onOpenPet?: (petId: string) => void;
 };
 
-export function DogsCard({ pets, isLoading = false, error = "", onAddDog, onOpenPet }: DogsCardProps) {
+export function DogsCard({ pets, isLoading = false, error = "", onRetry, onAddDog, onOpenPet }: DogsCardProps) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
@@ -35,6 +36,7 @@ export function DogsCard({ pets, isLoading = false, error = "", onAddDog, onOpen
       ) : error ? (
         <View style={styles.sectionCard}>
           <Text style={styles.petsError}>{error}</Text>
+          {onRetry ? <TouchableOpacity onPress={onRetry} accessibilityRole="button"><Text style={styles.sectionAction}>Spróbuj ponownie</Text></TouchableOpacity> : null}
         </View>
       ) : pets.length === 0 ? (
         <TouchableOpacity style={styles.emptyCard} onPress={onAddDog}>
@@ -48,7 +50,7 @@ export function DogsCard({ pets, isLoading = false, error = "", onAddDog, onOpen
       ) : (
         <View style={styles.sectionCard}>
           {pets.map((pet, index) => {
-            const meta = [pet.breed, pet.age !== null ? `${pet.age} lat` : null]
+            const meta = [pet.breed, pet.age !== null ? `${pet.age} ${pet.age === 1 ? "rok" : pet.age % 10 >= 2 && pet.age % 10 <= 4 && (pet.age % 100 < 12 || pet.age % 100 > 14) ? "lata" : "lat"}` : null]
               .filter(Boolean)
               .join(" • ");
 

@@ -1,5 +1,5 @@
 export type SitterServiceType = "DOG_WALK" | "DROP_IN" | "DAY_CARE";
-export type BookingStatus = "REQUESTED" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED";
+export type BookingStatus = "REQUESTED" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "EXPIRED";
 export type BookingPerspective = "owner" | "sitter" | "all";
 
 export interface Pagination {
@@ -26,6 +26,16 @@ export interface AvailabilitySlot {
   startsAt: string;
   endsAt: string;
   createdAt: string;
+  bookings?: ScheduleBooking[];
+}
+
+export interface ScheduleBooking {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: BookingStatus;
+  pet: { name: string };
+  sitterService: { type: SitterServiceType };
 }
 
 export interface SitterProfile {
@@ -33,6 +43,9 @@ export interface SitterProfile {
   accountId: string;
   bio: string;
   city: string;
+  region: string | null;
+  photoKey: string | null;
+  photoUrl: string | null;
   latitude: number;
   longitude: number;
   serviceRadiusKm: number;
@@ -48,6 +61,8 @@ export interface SitterSearchItem {
   displayName: string;
   bio: string;
   city: string;
+  region: string | null;
+  photoUrl: string | null;
   serviceRadiusKm: number;
   distanceKm: number;
   services: SitterService[];
@@ -64,6 +79,8 @@ export interface SitterServiceInput {
 export interface CreateSitterProfilePayload {
   bio: string;
   city: string;
+  region?: string | null;
+  photoKey?: string | null;
   latitude: number;
   longitude: number;
   serviceRadiusKm: number;
@@ -92,6 +109,9 @@ export interface Booking {
   sitterServiceId: string;
   availabilitySlotId: string;
   status: BookingStatus;
+  startsAt: string;
+  endsAt: string;
+  expiresAt: string;
   priceCents: number;
   currency: "PLN";
   note: string | null;
@@ -108,8 +128,15 @@ export interface CreateBookingPayload {
   petId: string;
   sitterServiceId: string;
   availabilitySlotId: string;
+  startsAt?: string;
+  durationMinutes?: number;
+  expectedPriceCents?: number;
   note?: string;
 }
+
+export type CreateBookingsPayload = Omit<CreateBookingPayload, "availabilitySlotId" | "startsAt"> & {
+  slots: { availabilitySlotId: string; startsAt: string }[];
+};
 
 export interface ListBookingsParams {
   perspective?: BookingPerspective;

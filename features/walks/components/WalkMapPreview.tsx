@@ -2,7 +2,7 @@ import { bookWalkStyles as styles } from "@/features/walks/styles";
 import { getWalkerMapPosition } from "@/features/walks/walkStage";
 import { UpcomingWalk } from "@/types/walks";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { DimensionValue, View } from "react-native";
 
 type WalkMapPreviewProps = {

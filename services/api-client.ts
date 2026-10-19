@@ -1,3 +1,4 @@
+import { getSessionRevision } from "./session-events";
 import { API_BASE_URL } from "@/constants/api";
 import { clearAuthTokens, getAccessToken, getRefreshToken, saveAuthTokens } from "./auth-storage";
 
@@ -27,16 +28,20 @@ type RefreshResponse = {
 };
 
 let refreshPromise: Promise<string | null> | null = null;
+let refreshRevision = -1;
 
 async function parseResponse(response: Response) {
+  if (response.status === 204 || response.status === 205) return null;
   const contentType = response.headers.get("content-type") ?? "";
   return contentType.includes("application/json") ? response.json() : null;
 }
 
 async function refreshAccessToken() {
-  if (refreshPromise) return refreshPromise;
+  const revision = getSessionRevision();
+  if (refreshPromise && refreshRevision === revision) return refreshPromise;
+  refreshRevision = revision;
 
-  refreshPromise = (async () => {
+  const pending = (async () => {
     const refreshToken = await getRefreshToken();
     if (!refreshToken) return null;
 
@@ -47,25 +52,29 @@ async function refreshAccessToken() {
         body: JSON.stringify({ refreshToken })
       });
 
+      if (revision !== getSessionRevision()) return null;
       if (!response.ok) {
         await clearAuthTokens();
         return null;
       }
 
       const payload = (await response.json()) as RefreshResponse;
+      if (revision !== getSessionRevision()) return null;
       await saveAuthTokens(payload.accessToken, payload.refreshToken, payload.account.id);
       return payload.accessToken;
     } catch {
       return null;
     }
   })().finally(() => {
-    refreshPromise = null;
+    if (refreshPromise === pending) refreshPromise = null;
   });
+  refreshPromise = pending;
 
-  return refreshPromise;
+  return pending;
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const revision = getSessionRevision();
   const url = `${API_BASE_URL}${path}`;
   const { token, skipAuthRefresh, ...fetchOptions } = options;
 
@@ -85,6 +94,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     headers
   });
 
+  if (token && revision !== getSessionRevision()) throw new ApiError("Sesja została zmieniona", 401);
   if (response.status === 401 && token && !skipAuthRefresh) {
     const renewedAccessToken = await refreshAccessToken();
     if (renewedAccessToken) {
@@ -106,6 +116,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     throw new ApiError(message, response.status, code, payload);
   }
 
+  if (token && revision !== getSessionRevision()) throw new ApiError("Sesja została zmieniona", 401);
   return payload as T;
 }
 

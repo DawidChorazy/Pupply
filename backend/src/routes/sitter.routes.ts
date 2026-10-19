@@ -3,16 +3,23 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/require-auth";
 import {
   addAvailability,
+  addAvailabilityBatch,
   createSitterProfile,
   deleteAvailability,
   getOwnSitterProfile,
+  getOwnSchedule,
+  getSitterAvailability,
   searchSitters,
-  updateSitterProfile
+  updateSitterProfile,
+  updateAvailability
 } from "../services/sitter.service";
 import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import {
   createAvailabilitySchema,
+  batchAvailabilitySchema,
+  sitterAvailabilityQuerySchema,
+  calendarQuerySchema,
   createSitterProfileSchema,
   searchSittersSchema,
   updateSitterProfileSchema
@@ -38,6 +45,11 @@ sitterRouter.get("/me", requireAuth, asyncHandler(async (req, res) => {
   res.status(200).json({ profile });
 }));
 
+sitterRouter.get("/me/schedule", requireAuth, asyncHandler(async (req, res) => {
+  if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
+  res.status(200).json(await getOwnSchedule(req.auth.accountId, req.auth.role, calendarQuerySchema.parse(req.query)));
+}));
+
 sitterRouter.patch("/me", requireAuth, asyncHandler(async (req, res) => {
   if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
   const input = updateSitterProfileSchema.parse(req.body);
@@ -56,6 +68,23 @@ sitterRouter.delete("/me/availability/:slotId", requireAuth, asyncHandler(async 
   if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
   await deleteAvailability(req.auth.accountId, req.auth.role, String(req.params.slotId));
   res.status(204).send();
+}));
+
+sitterRouter.post("/me/availability/batch", requireAuth, asyncHandler(async (req, res) => {
+  if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
+  const { slots } = batchAvailabilitySchema.parse(req.body);
+  res.status(201).json({ slots: await addAvailabilityBatch(req.auth.accountId, req.auth.role, slots) });
+}));
+
+sitterRouter.patch("/me/availability/:slotId", requireAuth, asyncHandler(async (req, res) => {
+  if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
+  const input = createAvailabilitySchema.parse(req.body);
+  res.status(200).json({ slot: await updateAvailability(req.auth.accountId, req.auth.role, String(req.params.slotId), input) });
+}));
+
+sitterRouter.get("/:profileId/availability", asyncHandler(async (req, res) => {
+  const { sitterServiceId, ...window } = sitterAvailabilityQuerySchema.parse(req.query);
+  res.status(200).json(await getSitterAvailability(String(req.params.profileId), sitterServiceId, window));
 }));
 
 export { sitterRouter };

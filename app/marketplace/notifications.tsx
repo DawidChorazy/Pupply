@@ -1,6 +1,5 @@
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, Text } from "expo-router/react-navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, TouchableOpacity, View } from "react-native";
@@ -11,7 +10,9 @@ import { AppNotification } from "@/types/notifications";
 import { marketplaceStyles as styles } from "@/styles/marketplace";
 
 export default function NotificationsScreen() {
-  const [items, setItems] = useState<AppNotification[]>([]); const [isLoading, setIsLoading] = useState(true); const [error, setError] = useState("");
+  const [items, setItems] = useState<AppNotification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
   const load = useCallback(async () => { setIsLoading(true); setError(""); try { const response = await listNotifications({ pageSize: 50 }); setItems(response.items); } catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : "Nie udało się pobrać powiadomień"); } finally { setIsLoading(false); } }, []);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   const readOne = async (item: AppNotification) => { try { if (!item.readAt) { await markNotificationRead(item.id); setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, readAt: new Date().toISOString() } : entry)); } if (item.bookingId) router.push("/marketplace/bookings" as never); } catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : "Nie udało się otworzyć powiadomienia"); } };

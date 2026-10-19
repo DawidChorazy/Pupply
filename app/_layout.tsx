@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
@@ -21,6 +21,11 @@ export default function RootLayout() {
         <PetsProvider>
           <WalksProvider>
             <Stack initialRouteName="index">
+              <Stack.Screen name="pet-sharing" options={{ headerShown: false }} />
+              <Stack.Screen name="shared-pet" options={{ headerShown: false }} />
+              <Stack.Screen name="account-settings" options={{ headerShown: false }} />
+              <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+              <Stack.Screen name="verify-email" options={{ headerShown: false }} />
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="mainScreen/MainScreen" options={{ headerShown: false }} />
               <Stack.Screen name="mainScreen/AddDogScreen" options={{ headerShown: false }} />
@@ -35,6 +40,7 @@ export default function RootLayout() {
               <Stack.Screen name="marketplace/book" options={{ headerShown: false }} />
               <Stack.Screen name="marketplace/bookings" options={{ headerShown: false }} />
               <Stack.Screen name="marketplace/sitter-profile" options={{ headerShown: false }} />
+              <Stack.Screen name="marketplace/schedule" options={{ headerShown: false }} />
               <Stack.Screen name="marketplace/notifications" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             </Stack>

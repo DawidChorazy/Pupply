@@ -7,11 +7,13 @@ import { BottomMenu } from "@/features/navigation/BottomMenu";
 import { usePetsList } from "@/features/pets/usePetsList";
 import { useWalksList } from "@/features/walks/useWalksList";
 import { router } from "expo-router";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { useState} from "react";
+import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 
 export default function MainScreen() {
   const { pets, isLoading, error } = usePetsList();
-  const { walks } = useWalksList();
+  const { walks, error: walksError, refreshWalks } = useWalksList();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const openCaregivers = () => router.push("/marketplace/sitters" as never);
 
   return (
@@ -43,6 +45,10 @@ export default function MainScreen() {
           />
         </View>
 
+        <TouchableOpacity style={screenStyles.scheduleLink} accessibilityRole="button" onPress={() => router.push("/marketplace/schedule" as never)}>
+          <Text style={screenStyles.scheduleTitle}>Mój grafik</Text><Text style={screenStyles.scheduleDescription}>Zarządzaj dostępnością i rezerwacjami →</Text>
+        </TouchableOpacity>
+
         <DogsCard
           pets={pets}
           isLoading={isLoading}
@@ -51,6 +57,7 @@ export default function MainScreen() {
           onOpenPet={(petId) => router.push(`../mainScreen/pets/${petId}`)}
         />
 
+        {walksError ? <TouchableOpacity onPress={() => void refreshWalks()}><Text>{walksError} · Spróbuj ponownie</Text></TouchableOpacity> : null}
         <WalksCard
           walks={walks}
           onBookWalk={openCaregivers}
@@ -64,6 +71,9 @@ export default function MainScreen() {
 }
 
 const screenStyles = StyleSheet.create({
+  scheduleLink: { borderWidth: 1, borderColor: "#F1DED0", backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, gap: 4, marginBottom: 18 },
+  scheduleTitle: { color: "#3D2415", fontSize: 16, fontWeight: "800" },
+  scheduleDescription: { color: "#8A6D5B", fontSize: 13 },
   shell: {
     flex: 1,
     backgroundColor: "#FFF8F0"

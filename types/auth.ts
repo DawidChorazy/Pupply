@@ -55,3 +55,9 @@ export interface ProfileResponse {
     emailVerifiedAt?: string | null;
   };
 }
+
+export interface UpdateUserProfilePayload {
+  fullName?: string;
+  phone?: string;
+  birthDate?: string | null;
+}

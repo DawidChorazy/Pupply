@@ -1,13 +1,15 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { router } from "expo-router";
-import { useCallback, useState } from "react";
-import { ActivityIndicator, ScrollView, TextInput, TouchableOpacity, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { ActivityIndicator, Image, ScrollView, TouchableOpacity, View } from "react-native";
 
 import { ApiError } from "@/services/api-client";
 import { searchSitters } from "@/services/sitters-service";
-import { SitterSearchItem, SitterServiceType } from "@/types/marketplace";
+import { SitterSearchItem, SitterService, SitterServiceType } from "@/types/marketplace";
 import { marketplaceStyles as styles } from "@/styles/marketplace";
+import { CareLocationPicker } from "@/components/forms/care-location-picker";
+import { CareLocation } from "@/services/location-service";
 
 const serviceLabels: Record<SitterServiceType, string> = {
   DOG_WALK: "Spacer",
@@ -16,37 +18,59 @@ const serviceLabels: Record<SitterServiceType, string> = {
 };
 
 export default function SittersScreen() {
-  const [latitude, setLatitude] = useState("52.2297");
-  const [longitude, setLongitude] = useState("21.0122");
+  const [location, setLocation] = useState<CareLocation | null>(null);
   const [radius, setRadius] = useState("25");
   const [serviceType, setServiceType] = useState<SitterServiceType>("DOG_WALK");
   const [items, setItems] = useState<SitterSearchItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<Record<string, string>>({});
+  const searchRevision = useRef(0);
+
+  const resetResults = () => {
+    searchRevision.current += 1;
+    setIsLoading(false);
+    setItems([]);
+    setSelectedServiceIds({});
+    setHasSearched(false);
+    setError("");
+  };
+
+  const changeLocation = (value: CareLocation | null) => {
+    setLocation(value);
+    resetResults();
+  };
 
   const load = useCallback(async () => {
-    const lat = Number(latitude.replace(",", "."));
-    const lng = Number(longitude.replace(",", "."));
+    if (!location) {
+      setError("Wybierz miejscowość z podpowiedzi lub użyj swojej lokalizacji.");
+      return;
+    }
+    const { latitude: lat, longitude: lng } = location;
     const radiusKm = Number(radius.replace(",", "."));
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusKm)) {
-      setError("Podaj prawidłowe współrzędne i promień");
+    if (!Number.isFinite(radiusKm) || radiusKm < 1 || radiusKm > 100) {
+      setError("Podaj odległość od 1 do 100 km");
       return;
     }
 
+    const current = ++searchRevision.current;
     setIsLoading(true);
+    setItems([]);
     setError("");
     try {
       const response = await searchSitters({ latitude: lat, longitude: lng, radiusKm, serviceType });
+      if (current !== searchRevision.current) return;
       setItems(response.items);
+      setHasSearched(true);
     } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : "Nie udało się pobrać opiekunów");
+      if (current === searchRevision.current) setError(requestError instanceof ApiError ? requestError.message : "Nie udało się pobrać opiekunów");
     } finally {
-      setIsLoading(false);
+      if (current === searchRevision.current) setIsLoading(false);
     }
-  }, [latitude, longitude, radius, serviceType]);
+  }, [location, radius, serviceType]);
 
-  const openBooking = (sitter: SitterSearchItem) => {
-    const service = sitter.services[0];
+  const openBooking = (sitter: SitterSearchItem, service: SitterService) => {
     const slot = sitter.availability.find((candidate) => {
       const duration = (new Date(candidate.endsAt).getTime() - new Date(candidate.startsAt).getTime()) / 60000;
       return duration >= (service?.durationMinutes ?? Number.POSITIVE_INFINITY);
@@ -54,7 +78,7 @@ export default function SittersScreen() {
     if (!service || !slot) return;
     router.push({
       pathname: "/marketplace/book" as never,
-      params: { sitterName: sitter.displayName, sitterServiceId: service.id, availabilitySlotId: slot.id }
+      params: { sitterId: sitter.id, sitterName: sitter.displayName, sitterServiceId: service.id }
     });
   };
 
@@ -78,31 +102,30 @@ export default function SittersScreen() {
             <TouchableOpacity
               key={type}
               style={[styles.chip, serviceType === type && styles.chipActive]}
-              onPress={() => setServiceType(type)}
+              onPress={() => { setServiceType(type); resetResults(); }}
             >
               <Text style={[styles.chipText, serviceType === type && styles.chipTextActive]}>{serviceLabels[type]}</Text>
             </TouchableOpacity>
           ))}
         </View>
         <View style={styles.divider} />
-        <Text style={styles.label}>Twoja lokalizacja</Text>
-        <View style={styles.row}>
-          <TextInput style={[styles.input, styles.half]} value={latitude} onChangeText={setLatitude} placeholder="Szerokość" keyboardType="decimal-pad" />
-          <TextInput style={[styles.input, styles.half]} value={longitude} onChangeText={setLongitude} placeholder="Długość" keyboardType="decimal-pad" />
+        <CareLocationPicker value={location} onChange={changeLocation} />
+        <Text style={styles.label}>Odległość od lokalizacji</Text>
+        <View style={[styles.wrap, { marginBottom: 10 }]}>
+          {[5, 10, 25, 50].map(km => <TouchableOpacity key={km} style={[styles.chip, Number(radius) === km && styles.chipActive]} onPress={() => { setRadius(String(km)); resetResults(); }} accessibilityRole="button" accessibilityState={{ selected: Number(radius) === km }}><Text style={[styles.chipText, Number(radius) === km && styles.chipTextActive]}>Do {km} km</Text></TouchableOpacity>)}
         </View>
-        <TextInput style={styles.input} value={radius} onChangeText={setRadius} placeholder="Promień w km" keyboardType="decimal-pad" />
         <TouchableOpacity style={[styles.primaryButton, isLoading && styles.buttonDisabled]} onPress={load} disabled={isLoading}>
           {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Szukaj opiekunów</Text>}
         </TouchableOpacity>
       </View>
 
       {error ? <Text style={styles.statusError}>{error}</Text> : null}
-      {!isLoading && !error && items.length === 0 ? (
+      {!isLoading && !error && hasSearched && items.length === 0 ? (
         <View style={styles.card}><View style={styles.empty}><Text style={styles.cardTitle}>Brak wyników</Text><Text style={styles.muted}>Zwiększ promień albo wybierz inną usługę.</Text></View></View>
       ) : null}
 
       {items.map((sitter) => {
-        const service = sitter.services[0];
+        const service = sitter.services.find(item => item.id === selectedServiceIds[sitter.id]) ?? sitter.services[0];
         const validSlots = sitter.availability.filter((slot) => {
           const duration = (new Date(slot.endsAt).getTime() - new Date(slot.startsAt).getTime()) / 60000;
           return duration >= (service?.durationMinutes ?? Number.POSITIVE_INFINITY);
@@ -110,23 +133,25 @@ export default function SittersScreen() {
         return (
           <View style={styles.card} key={sitter.id}>
             <View style={styles.spaceBetween}>
+              {sitter.photoUrl ? <Image source={{ uri: sitter.photoUrl }} style={{ width: 56, height: 56, borderRadius: 18, marginRight: 12 }} /> : null}
               <View style={styles.headerCopy}>
                 <Text style={styles.cardTitle}>{sitter.displayName}</Text>
-                <Text style={styles.muted}>{sitter.city} • {sitter.distanceKm.toFixed(1)} km</Text>
+                <Text style={styles.muted}>{[sitter.city, sitter.region && `woj. ${sitter.region}`].filter(Boolean).join(" · ")} • {sitter.distanceKm.toFixed(1)} km</Text>
               </View>
               {service ? <Text style={styles.price}>{(service.priceCents / 100).toFixed(2)} zł</Text> : null}
             </View>
             <Text style={[styles.body, { marginTop: 10 }]}>{sitter.bio}</Text>
             <View style={styles.divider} />
+            {sitter.services.length > 1 ? <View style={[styles.wrap, { marginBottom: 12 }]}>{sitter.services.map(variant => <TouchableOpacity key={variant.id} style={[styles.chip, service?.id === variant.id && styles.chipActive]} onPress={() => setSelectedServiceIds(current => ({ ...current, [sitter.id]: variant.id }))} accessibilityRole="button" accessibilityState={{ selected: service?.id === variant.id }}><Text style={[styles.chipText, service?.id === variant.id && styles.chipTextActive]}>{variant.durationMinutes} min · {(variant.priceCents / 100).toFixed(2)} zł</Text></TouchableOpacity>)}</View> : null}
             {service ? <Text style={styles.muted}>{serviceLabels[service.type]} • {service.durationMinutes} min</Text> : null}
             <Text style={[styles.label, { marginTop: 10 }]}>Najbliższy wolny termin</Text>
             <Text style={styles.body}>{validSlots[0] ? new Date(validSlots[0].startsAt).toLocaleString("pl-PL") : "Brak wolnych terminów"}</Text>
             <TouchableOpacity
               style={[styles.primaryButton, (!service || !validSlots.length) && styles.buttonDisabled]}
               disabled={!service || !validSlots.length}
-              onPress={() => openBooking(sitter)}
+              onPress={() => { if (service) openBooking(sitter, service); }}
             >
-              <Text style={styles.primaryButtonText}>Zarezerwuj</Text>
+              <Text style={styles.primaryButtonText}>Wybierz dzień i godzinę</Text>
             </TouchableOpacity>
           </View>
         );

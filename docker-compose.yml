@@ -1,4 +1,9 @@
 services:
+  mailpit:
+    image: docker.io/axllent/mailpit:v1.31.4
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -39,10 +44,13 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       S3_BUCKET: ${S3_BUCKET:-pupply}
+      S3_DOCUMENT_BUCKET: ${S3_DOCUMENT_BUCKET:-pupply-documents}
     entrypoint: >
       /bin/sh -c "until mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\"; do sleep 1; done;
       mc mb --ignore-existing \"local/$${S3_BUCKET}\";
-      mc anonymous set download \"local/$${S3_BUCKET}\";"
+      mc anonymous set download \"local/$${S3_BUCKET}\" &&
+      mc mb --ignore-existing \"local/$${S3_DOCUMENT_BUCKET}\" &&
+      mc anonymous set none \"local/$${S3_DOCUMENT_BUCKET}\";"
 
   backend:
     build:
@@ -65,8 +73,8 @@ services:
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-20}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
@@ -75,6 +83,12 @@ services:
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
       S3_BUCKET: ${S3_BUCKET:-pupply}
+      S3_DOCUMENT_BUCKET: ${S3_DOCUMENT_BUCKET:-pupply-documents}
+      DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-10000000}
+      BOOKING_REQUEST_TTL_HOURS: ${BOOKING_REQUEST_TTL_HOURS:-24}
+      MAINTENANCE_INTERVAL_SECONDS: ${MAINTENANCE_INTERVAL_SECONDS:-60}
+      PUSH_ENABLED: ${PUSH_ENABLED:-false}
+      EXPO_PUSH_ACCESS_TOKEN: ${EXPO_PUSH_ACCESS_TOKEN:-}
       S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
       S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       S3_FORCE_PATH_STYLE: "true"
@@ -83,6 +97,8 @@ services:
     ports:
       - "${BACKEND_PORT:-4000}:4000"
     depends_on:
+      mailpit:
+        condition: service_started
       postgres:
         condition: service_healthy
       minio-init:

@@ -4,7 +4,7 @@ import { ApiError, authenticatedApiRequest } from "./api-client";
 
 type SupportedImageType = "image/jpeg" | "image/png" | "image/webp";
 
-export async function uploadPetPhoto(uri: string, contentType: SupportedImageType) {
+async function uploadPhoto(uri: string, contentType: SupportedImageType, endpoint: string) {
   const imageResponse = await fetch(uri);
   if (!imageResponse.ok) throw new ApiError("Nie udało się odczytać zdjęcia", 400, "IMAGE_READ_FAILED");
   const blob = await imageResponse.blob();
@@ -13,7 +13,7 @@ export async function uploadPetPhoto(uri: string, contentType: SupportedImageTyp
     uploadUrl: string;
     photoKey: string;
     expiresIn: number;
-  }>(API_ENDPOINTS.uploads.petPhoto, {
+  }>(endpoint, {
     method: "POST",
     body: JSON.stringify({ contentType, sizeBytes: blob.size })
   });
@@ -25,4 +25,12 @@ export async function uploadPetPhoto(uri: string, contentType: SupportedImageTyp
   });
   if (!putResponse.ok) throw new ApiError("Nie udało się wysłać zdjęcia", putResponse.status, "UPLOAD_FAILED");
   return upload.photoKey;
+}
+
+export function uploadPetPhoto(uri: string, contentType: SupportedImageType) {
+  return uploadPhoto(uri, contentType, API_ENDPOINTS.uploads.petPhoto);
+}
+
+export function uploadSitterPhoto(uri: string, contentType: SupportedImageType) {
+  return uploadPhoto(uri, contentType, "/uploads/sitter-photo");
 }

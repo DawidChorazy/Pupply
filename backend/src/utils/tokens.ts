@@ -7,6 +7,8 @@ import { env } from "../config/env";
 type AccessPayload = {
   accountId: string;
   role: AccountRole;
+  version: number;
+  sessionId?: string;
 };
 
 type RefreshPayload = AccessPayload & {
@@ -14,8 +16,8 @@ type RefreshPayload = AccessPayload & {
   type: "refresh";
 };
 
-export function signAccessToken(accountId: string, role: AccountRole) {
-  return jwt.sign({ role }, env.JWT_ACCESS_SECRET, {
+export function signAccessToken(accountId: string, role: AccountRole, version = 0, sessionId?: string) {
+  return jwt.sign({ role, version, sessionId }, env.JWT_ACCESS_SECRET, {
     subject: accountId,
     issuer: "pupply-api",
     audience: "pupply-app",
@@ -38,6 +40,8 @@ export function verifyAccessToken(token: string): AccessPayload {
     audience: "pupply-app"
   }) as jwt.JwtPayload & {
     role?: AccountRole;
+    version?: number;
+    sessionId?: string;
   };
 
   if (!decoded.sub || !decoded.role) {
@@ -46,7 +50,9 @@ export function verifyAccessToken(token: string): AccessPayload {
 
   return {
     accountId: decoded.sub,
-    role: decoded.role
+    role: decoded.role,
+    version: decoded.version ?? 0,
+    sessionId: decoded.sessionId
   };
 }
 
@@ -67,6 +73,7 @@ export function verifyRefreshToken(token: string): RefreshPayload {
   return {
     accountId: decoded.sub,
     role: decoded.role,
+    version: 0,
     tokenId: decoded.tokenId,
     type: "refresh"
   };

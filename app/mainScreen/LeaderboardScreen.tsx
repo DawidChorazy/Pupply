@@ -1,11 +1,27 @@
 import { useGamification } from "@/features/gamification/GamificationContext";
 import { BottomMenu } from "@/features/navigation/BottomMenu";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { useCallback } from "react";
+import { useFocusEffect } from "expo-router";
+import { Text } from "expo-router/react-navigation";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View
+} from "react-native";
 
 export default function LeaderboardScreen() {
-  const { leaderboard, userPoints } = useGamification();
+  const { ranking, rankingLoading, rankingError, refreshRanking } =
+    useGamification();
+  useFocusEffect(
+    useCallback(() => {
+      void refreshRanking();
+    }, [refreshRanking])
+  );
+  const leaderboard = ranking?.leaderboard ?? [];
 
   return (
     <View style={styles.shell}>
@@ -13,34 +29,111 @@ export default function LeaderboardScreen() {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={rankingLoading}
+            onRefresh={() => void refreshRanking()}
+          />
+        }
       >
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>Leaderboard</Text>
+          <Text style={styles.eyebrow}>Ranking</Text>
           <Text style={styles.title}>Ranking punktów</Text>
-          <Text style={styles.subtitle}>Punkty z questów wpływają na Twoje miejsce w rankingu.</Text>
+          <Text style={styles.subtitle}>
+            Punkty z questów wpływają na Twoje miejsce w rankingu.
+          </Text>
+          <TouchableOpacity
+            accessibilityRole="button"
+            onPress={() => void refreshRanking()}
+            disabled={rankingLoading}
+          >
+            <Text style={[styles.rankPoints, { marginTop: 12 }]}>
+              {rankingLoading ? "Odświeżanie…" : "Odśwież ranking"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.pointsCard}>
-          <MaterialCommunityIcons name="star-four-points-outline" size={28} color="#D35400" />
-          <View>
-            <Text style={styles.pointsLabel}>Twoje punkty</Text>
-            <Text style={styles.pointsValue}>{userPoints} pkt</Text>
+        {rankingLoading && !ranking ? (
+          <ActivityIndicator color="#D35400" />
+        ) : null}
+        {rankingError ? (
+          <View
+            style={[
+              styles.pointsCard,
+              { flexDirection: "column", alignItems: "stretch" }
+            ]}
+          >
+            <Text style={styles.rankName}>{rankingError}</Text>
+            <TouchableOpacity
+              onPress={() => void refreshRanking()}
+              accessibilityRole="button"
+            >
+              <Text style={styles.rankPoints}>Ponów</Text>
+            </TouchableOpacity>
           </View>
-        </View>
-
+        ) : null}
+        {ranking?.currentUser ? (
+          <View style={styles.pointsCard}>
+            <MaterialCommunityIcons
+              name="star-four-points-outline"
+              size={28}
+              color="#D35400"
+            />
+            <View>
+              <Text style={styles.pointsLabel}>Twoje punkty</Text>
+              <Text style={styles.pointsValue}>
+                {ranking.currentUser.points} pkt
+              </Text>
+              <Text style={styles.rankBadgeText}>
+                Miejsce: {ranking.currentUser.rank}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+        <Text style={[styles.subtitle, { marginBottom: 14 }]}>
+          Ranking ogólny · 50 pierwszych osób. Przy remisie miejsce jest
+          wspólne.
+        </Text>
+        {ranking &&
+        !rankingLoading &&
+        !rankingError &&
+        leaderboard.length === 0 ? (
+          <Text style={styles.rankName}>Ranking jest jeszcze pusty.</Text>
+        ) : null}
         <View style={styles.list}>
-          {leaderboard.map((user, index) => {
-            const isCurrentUser = user.id === "current-user";
+          {leaderboard.map((user) => {
+            const isCurrentUser = user.isCurrentUser;
 
             return (
-              <View key={user.id} style={[styles.rankRow, isCurrentUser && styles.rankRowCurrent]}>
-                <View style={[styles.rankBadge, index < 3 && styles.rankBadgeTop]}>
-                  <Text style={[styles.rankNumber, index < 3 && styles.rankNumberTop]}>{index + 1}</Text>
+              <View
+                key={user.id}
+                style={[styles.rankRow, isCurrentUser && styles.rankRowCurrent]}
+              >
+                <View
+                  style={[
+                    styles.rankBadge,
+                    user.rank <= 3 && styles.rankBadgeTop
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.rankNumber,
+                      user.rank <= 3 && styles.rankNumberTop
+                    ]}
+                  >
+                    {user.rank}
+                  </Text>
                 </View>
 
                 <View style={styles.rankInfo}>
-                  <Text style={styles.rankName}>{user.name}</Text>
-                  <Text style={styles.rankBadgeText}>{user.badge}</Text>
+                  <Text style={styles.rankName}>
+                    {isCurrentUser ? `${user.name} (Ty)` : user.name}
+                  </Text>
+                  <Text style={styles.rankBadgeText}>
+                    {user.points
+                      ? "Punkty za wykonane zadania"
+                      : "Pierwsze punkty przed Tobą"}
+                  </Text>
                 </View>
 
                 <Text style={styles.rankPoints}>{user.points}</Text>

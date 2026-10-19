@@ -1,9 +1,9 @@
 import { usePetsContext } from "@/features/pets/PetsContext";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { useCallback } from "react";
 
 export function usePetsList() {
-  const { pets, isLoading, error, refreshPets } = usePetsContext();
+  const { pets, isLoading, error, refreshPets, authRequired } = usePetsContext();
 
   useFocusEffect(
     useCallback(() => {
@@ -12,6 +12,7 @@ export function usePetsList() {
   );
 
   return {
+    authRequired,
     pets,
     isLoading,
     error,

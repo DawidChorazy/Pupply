@@ -1,7 +1,8 @@
+import { usePetsContext } from "@/features/pets/PetsContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,7 +14,7 @@ import {
 } from "react-native";
 import { ApiError } from "@/services/api-client";
 import { getAccessToken } from "@/services/auth-storage";
-import { createPet } from "@/services/pets-service";
+import { createPet, updatePet } from "@/services/pets-service";
 import { uploadPetPhoto } from "@/services/uploads-service";
 import { PetGender } from "@/types/pets";
 import { addDogStyles as styles } from "@/features/home/styles";
@@ -21,6 +22,11 @@ import { DogBreedPicker } from "@/components/forms/dog-breed-picker";
 import { PetHealthEditor } from "@/components/forms/pet-health-editor";
 import { PetPhotoPicker } from "@/components/forms/pet-photo-picker";
 import { PetIllnessRecord, serializePetAllergies, serializePetIllnesses } from "@/types/pet-health";
+import * as DocumentPicker from "expo-document-picker";
+import { PetDocumentList } from "@/components/forms/pet-document-list"
+import { savePetDocuments } from "@/services/pet-documents-store"
+import type { PetDocument } from "@/types/pet-document";
+import { isValidDocumentDate } from "@/utils/document-date";
 
 type DogForm = {
   photoUrl: string;
@@ -73,6 +79,8 @@ const parseOptionalInt = (value: string) => {
 };
 
 export default function AddDogScreen() {
+  const { addPet, updatePetInList } = usePetsContext();
+  const createdPetId = useRef<string | null>(null);
   const [form, setForm] = useState<DogForm>(initialForm);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -80,6 +88,49 @@ export default function AddDogScreen() {
   const [pendingPhoto, setPendingPhoto] = useState<{ uri: string; contentType: "image/jpeg" | "image/png" | "image/webp" } | null>(null);
   const [illnesses, setIllnesses] = useState<PetIllnessRecord[]>([]);
   const [allergies, setAllergies] = useState<string[]>([]);
+  const [documents, setDocuments] = useState<PetDocument[]>([])
+
+  const pickDocuments = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "application/pdf",
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if(result.canceled) return;
+
+      const newDocuments: PetDocument[] = result.assets.map((asset, index) => ({
+        ...asset,
+        id: `${Date.now()}-${index}`,
+        expiresAt: "",
+        reminderDaysBefore: 7,
+      }));
+
+      setDocuments((current) => [...current, ...newDocuments])
+    } catch{
+      setError("Nie udało się wybrać dokumentu.")
+    }
+    
+  }
+
+  const removeDocuments = (indexToRemove: number) => {
+    setDocuments((current) => current.filter((document, index) => index !== indexToRemove));
+  }
+
+  const updateDocumentExpiry = (documentId: string, value: string) => {
+    setDocuments((current) => 
+    current.map((document) =>
+    document.id === documentId ? {...document, expiresAt: value} : document
+    )
+  )
+  } 
+
+  const documentExpirationReminder = (documentId: string, days: number) => {
+    setDocuments((current) => 
+    current.map((document) =>
+    document.id === documentId ? {...document, reminderDaysBefore: days}: document))
+  }
 
   const updateField = (field: keyof DogForm, value: string) => {
     setForm((currentForm) => ({
@@ -116,6 +167,17 @@ export default function AddDogScreen() {
       return;
     }
 
+    const invalidDocument = documents.find(
+      (document) => !isValidDocumentDate(document.expiresAt)
+    )
+
+    if(invalidDocument){
+      setError(
+        `Dokument "${invalidDocument.name} ma nieprawidłową datę. Użyj DD.MM.YYYY"`
+      );
+      return;
+    }
+
     const accessToken = await getAccessToken();
     if (!accessToken) {
       setError("Zaloguj się ponownie, aby dodać zwierzaka");
@@ -128,8 +190,7 @@ export default function AddDogScreen() {
       const photoKey = pendingPhoto
         ? await uploadPetPhoto(pendingPhoto.uri, pendingPhoto.contentType)
         : undefined;
-      await createPet(
-        {
+      const payload = {
           name: form.name.trim(),
           gender: form.gender,
           age,
@@ -141,10 +202,16 @@ export default function AddDogScreen() {
           vaccines: optionalText(form.vaccines),
           vet: optionalText(form.vet),
           notes: optionalText(form.notes)
-        },
-        accessToken
-      );
-
+        };
+      const response = createdPetId.current
+        ? await updatePet(createdPetId.current, payload, accessToken)
+        : await createPet(payload, accessToken);
+      createdPetId.current = response.pet.id;
+      addPet(response.pet);
+      updatePetInList(response.pet);
+      await savePetDocuments(response.pet.id, documents);
+      createdPetId.current = null;
+      setDocuments([]);
       setSuccess("Zwierzak został dodany");
       setForm(initialForm);
       setPendingPhoto(null);
@@ -284,6 +351,15 @@ export default function AddDogScreen() {
             value={form.vet}
             onChangeText={(value) => updateField("vet", value)}
           />
+
+          <Text style={[styles.subtitle]}>Dokumenty medyczne</Text>
+
+          <TouchableOpacity onPress={pickDocuments}>
+            <Text>Dodaj PDF</Text>
+          </TouchableOpacity>
+
+          <PetDocumentList documents={documents} onRemove={removeDocuments} onExpiryChange={updateDocumentExpiry} onReminderChange={documentExpirationReminder}/>
+
 
           <TextInput
             style={[styles.input, styles.textArea]}

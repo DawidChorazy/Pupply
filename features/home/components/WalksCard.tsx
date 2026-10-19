@@ -1,7 +1,6 @@
 import { UpcomingWalk } from "@/types/walks";
-import { getWalkStage, getWalkStageLabel } from "@/features/walks/walkStage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text } from "@react-navigation/elements";
+import { Text } from "expo-router/react-navigation";
 import { TouchableOpacity, View } from "react-native";
 
 import { styles } from "../styles";
@@ -12,28 +11,10 @@ type WalksCardProps = {
   onOpenWalk?: (walkId: string) => void;
 };
 
-function getStatusBadgeLabel(walk: UpcomingWalk) {
-  const stage = getWalkStage({ ...walk, bookedAt: walk.bookedAt ?? new Date().toISOString() });
-
-  if (stage === "completed") {
-    return "Zakończony";
-  }
-
-  return getWalkStageLabel(stage);
-}
-
+const labels = { REQUESTED: "Oczekuje", ACCEPTED: "Zaakceptowany", REJECTED: "Odrzucony", CANCELLED: "Anulowany", COMPLETED: "Zakończony", EXPIRED: "Wygasły" };
+function getStatusBadgeLabel(walk: UpcomingWalk) { return labels[walk.bookingStatus]; }
 function getStatusBadgeStyle(walk: UpcomingWalk) {
-  const stage = getWalkStage({ ...walk, bookedAt: walk.bookedAt ?? new Date().toISOString() });
-
-  if (stage === "completed") {
-    return styles.walkStatusBadgeCompleted;
-  }
-
-  if (stage === "in_progress" || stage === "returning") {
-    return styles.walkStatusBadgeActive;
-  }
-
-  return styles.walkStatusBadge;
+  return walk.bookingStatus === "COMPLETED" ? styles.walkStatusBadgeCompleted : styles.walkStatusBadge;
 }
 
 export function WalksCard({ walks = [], onBookWalk, onOpenWalk }: WalksCardProps) {

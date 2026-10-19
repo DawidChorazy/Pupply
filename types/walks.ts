@@ -1,3 +1,4 @@
+import type { BookingStatus } from "./marketplace";
 export type WalkStatus = "confirmed" | "pending";
 
 export type WalkStage = "waiting" | "in_progress" | "returning" | "completed";
@@ -29,6 +30,9 @@ export type Caregiver = {
 };
 
 export type UpcomingWalk = {
+  bookingStatus: BookingStatus;
+  startsAt: string;
+  endsAt: string;
   id: string;
   caregiverId: string;
   caregiverName: string;
