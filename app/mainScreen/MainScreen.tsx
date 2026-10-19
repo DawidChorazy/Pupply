@@ -45,6 +45,10 @@ export default function MainScreen() {
           />
         </View>
 
+        <TouchableOpacity style={screenStyles.scheduleLink} accessibilityRole="button" onPress={() => router.push("/marketplace/schedule" as never)}>
+          <Text style={screenStyles.scheduleTitle}>Mój grafik</Text><Text style={screenStyles.scheduleDescription}>Zarządzaj dostępnością i rezerwacjami →</Text>
+        </TouchableOpacity>
+
         <DogsCard
           pets={pets}
           isLoading={isLoading}
@@ -67,6 +71,9 @@ export default function MainScreen() {
 }
 
 const screenStyles = StyleSheet.create({
+  scheduleLink: { borderWidth: 1, borderColor: "#F1DED0", backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, gap: 4, marginBottom: 18 },
+  scheduleTitle: { color: "#3D2415", fontSize: 16, fontWeight: "800" },
+  scheduleDescription: { color: "#8A6D5B", fontSize: 13 },
   shell: {
     flex: 1,
     backgroundColor: "#FFF8F0"

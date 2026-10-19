@@ -78,7 +78,7 @@ export default function SittersScreen() {
     if (!service || !slot) return;
     router.push({
       pathname: "/marketplace/book" as never,
-      params: { sitterName: sitter.displayName, sitterServiceId: service.id, availabilitySlotId: slot.id, startsAt: slot.startsAt }
+      params: { sitterId: sitter.id, sitterName: sitter.displayName, sitterServiceId: service.id }
     });
   };
 
@@ -151,7 +151,7 @@ export default function SittersScreen() {
               disabled={!service || !validSlots.length}
               onPress={() => { if (service) openBooking(sitter, service); }}
             >
-              <Text style={styles.primaryButtonText}>Zarezerwuj</Text>
+              <Text style={styles.primaryButtonText}>Wybierz dzień i godzinę</Text>
             </TouchableOpacity>
           </View>
         );

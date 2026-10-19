@@ -76,7 +76,7 @@ export default function BookingsScreen() {
             </View>
             <View style={styles.divider} />
             <Text style={styles.body}>{new Date(booking.startsAt).toLocaleString("pl-PL")}</Text>
-            <Text style={styles.muted}>{booking.sitterService.durationMinutes} min • {(booking.priceCents / 100).toFixed(2)} zł</Text>
+            <Text style={styles.muted}>{Math.round((Date.parse(booking.endsAt) - Date.parse(booking.startsAt)) / 60_000)} min • {(booking.priceCents / 100).toFixed(2)} zł</Text>
             {booking.note ? <Text style={[styles.body, { marginTop: 8 }]}>{booking.note}</Text> : null}
             {changingId === booking.id ? <ActivityIndicator style={{ marginTop: 12 }} color="#D35400" /> : (
               <View style={styles.wrap}>

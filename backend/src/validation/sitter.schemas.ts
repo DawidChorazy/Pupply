@@ -52,6 +52,23 @@ export const createAvailabilitySchema = z
   .refine((data) => data.endsAt > data.startsAt, { path: ["endsAt"], message: "End must be after start" })
   .refine((data) => data.startsAt > new Date(), { path: ["startsAt"], message: "Slot must be in the future" });
 
+export const batchAvailabilitySchema = z.object({
+  slots: z.array(createAvailabilitySchema).min(1).max(56)
+}).refine(({ slots }) => {
+  const sorted = [...slots].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return sorted.every((slot, index) => index === 0 || slot.startsAt >= sorted[index - 1].endsAt);
+}, { path: ["slots"], message: "Availability intervals must not overlap" });
+
+const calendarFields = {
+  from: z.coerce.date().optional(), to: z.coerce.date().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(100), cursor: z.string().min(1).max(100).optional()
+};
+const validCalendarWindow = (input: { from?: Date; to?: Date }) => Boolean(input.from) === Boolean(input.to)
+  && (!input.from || !input.to || (input.to > input.from && input.to.getTime() - input.from.getTime() <= 62 * 86_400_000));
+export const calendarQuerySchema = z.object(calendarFields).refine(validCalendarWindow, "Podaj poprawny zakres from/to, maksymalnie 62 dni.");
+export const sitterAvailabilityQuerySchema = z.object({ ...calendarFields, sitterServiceId: z.string().min(1) })
+  .refine(validCalendarWindow, "Podaj poprawny zakres from/to, maksymalnie 62 dni.");
+
 export const searchSittersSchema = z
   .object({
     latitude: z.coerce.number().min(-90).max(90),

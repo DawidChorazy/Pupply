@@ -114,11 +114,31 @@ Publiczny serwer Photon nie wymaga klucza API, ale nie gwarantuje dostępności.
 
 ## Profil opiekuna
 
-Formularz „Zostań opiekunem” zapisuje opis, miejscowość i województwo, zasięg działania, opcjonalne zdjęcie oraz do 20 ofert z osobnymi cenami. Można dodać kilka wariantów jednej usługi o różnym czasie. Cena jest kwotą za jedną rezerwację o podanym czasie. Usunięte warianty zostają nieaktywne w bazie, aby zachować historię rezerwacji.
+Formularz „Zostań opiekunem” zapisuje opis, miejscowość i województwo, zasięg działania, opcjonalne zdjęcie oraz do 20 ofert z osobnymi cenami. Można dodać kilka wariantów jednej usługi o różnym czasie. Cena dotyczy podanego minimalnego czasu usługi. Dłuższa rezerwacja kosztuje proporcjonalnie więcej według tej stawki. Usunięte warianty zostają nieaktywne w bazie, aby zachować historię rezerwacji.
 
 Zdjęcia są przesyłane przez `POST /api/uploads/sitter-photo` do storage i przypisane do konta opiekuna. Przed zapisaniem backend sprawdza własność i istnienie zdjęcia. Wstrzymanie widoczności profilu nie usuwa istniejących rezerwacji. Dodanie i usunięcie dostępności zapisuje się od razu, a pozostałe zmiany po kliknięciu „Zapisz”.
 
 Po aktualizacji zastosuj migracje (`npx prisma migrate deploy` w `backend`) oraz wygeneruj klienta (`npm run backend:prisma:generate`). Przy korzystaniu z telefonu `S3_PUBLIC_ENDPOINT` i `S3_PUBLIC_BASE_URL` w `backend/.env` muszą wskazywać dostępny w LAN adres komputera, tak samo jak API; `localhost` na telefonie nie prowadzi do MinIO na komputerze.
+
+## Kalendarz i grafik opiekuna
+
+Na ekranie głównym wybierz **Mój grafik**. Kalendarz jest też dostępny pod profilem opiekuna. Zaznacz kilka dni w kalendarzu (ponowne kliknięcie odznacza dzień), a następnie ustaw dla nich wspólne godziny jednym zapisem. Wybierz gotowy zakres (rano, popołudnie lub cały dzień) albo ustaw początek i koniec przez wybór godziny. Opcjonalna przerwa dzieli dostępność na dwa przedziały i wyłącza ten czas z rezerwacji.
+
+Opcja **Powtórz w wybrane dni** dodaje te same godziny na wybrane dni tygodnia przez 1, 2 lub 4 tygodnie od zaznaczonej daty. To zapis konkretnych dni, bez automatycznego przedłużania. Godziny pozostają lokalne również przy zmianie czasu. Cały grafik zapisuje się jednym żądaniem: jeśli którykolwiek przedział koliduje z zapisanym grafikiem, żaden nowy termin nie zostaje dodany.
+
+Zielone znaczniki pokazują wolne godziny, a bursztynowe — aktywne rezerwacje. Po wybraniu dnia zobaczysz przedziały dostępności, pozostałe wolne godziny i wizyty. Ikona ołówka pozwala zmienić przyszły jednodniowy przedział. Nowe godziny muszą obejmować aktywne przyszłe wizyty. Anulowane, odrzucone, wygasłe i zakończone wizyty nie blokują zmian. Usunięcie przedziału bez aktywnych wizyt archiwizuje go i zamyka godziny dla nowych rezerwacji, zachowując historię i zapisane kwoty. Ten sam przedział można później otworzyć ponownie jako nową dostępność.
+
+Przy wyszukiwaniu opieki wybierz **Wybierz dzień i godzinę**. Kalendarz proponuje początki co 15 minut, uwzględniając długość usługi i pozostałe wolne przedziały. Możesz zaznaczyć kilka dni i wybrać wspólną wolną godzinę dla wszystkich. Wybierz również czas opieki: gotowy wariant lub przyciski ±15 minut. Minimalny czas wynika z wybranej oferty, maksymalny wynosi 24 godziny. Cena rośnie proporcjonalnie: przy 30 zł za 30 minut, 60 minut kosztuje 60 zł. Podsumowanie pokazuje cenę za wizytę i sumę za wszystkie dni. Każda wizyta musi w całości zmieścić się w jednym wolnym przedziale. Rezerwacja wysyła wybraną godzinę i długość opieki; serwer ponownie sprawdza dostępność i sam wylicza cenę. Zmiana ceny od wyświetlenia oferty wymaga ponownego sprawdzenia kwoty. Kilka dni zapisuje się atomowo: kolizja dowolnego terminu cofa cały zapis nowych rezerwacji i powiadomień. Jeśli ktoś w międzyczasie zajmie termin, kalendarz się odświeża i prosi o ponowny wybór.
+
+API: `POST /api/sitters/me/availability/batch` (do 56 przedziałów, zapis atomowy), `PATCH /api/sitters/me/availability/:slotId` i publiczne `GET /api/sitters/:profileId/availability?sitterServiceId=…`. Publiczne API zwraca wyłącznie usługę i wolne przedziały; nie zwraca danych rezerwacji ani pupili. Rezerwacje przyjmują opcjonalne `durationMinutes` i `expectedPriceCents` (cena jednej wizyty). `POST /api/bookings/batch` przyjmuje do 28 terminów ze wspólnym pupilem, usługą, czasem i ceną oczekiwaną; zwraca rezerwacje i `totalPriceCents`. Poprawki niezawodności wymagają migracji `20261019220000_schedule_reliability` oraz ponownego wygenerowania klienta Prisma.
+
+Rezerwacje ponawiają transakcję przy przejściowych konfliktach bazy (maksymalnie 5 prób). Rzeczywista kolizja terminu zwraca `409`, a wyczerpanie prób `503 BOOKING_BUSY`. Klient wysyła `Idempotency-Key`: ponowienie tej samej operacji odtwarza jej pierwotny wynik bez dodatkowych rezerwacji i powiadomień. Klucz, skrót danych i wynik są zapisywane w tej samej transakcji co wizyty. Ponowne użycie klucza z innymi danymi zwraca `409 IDEMPOTENCY_KEY_REUSED`. Klucze są przypisane do konta i zachowywane do jego usunięcia; nagłówek pozostaje opcjonalny dla starszych klientów API.
+
+Aplikacja zachowuje identyfikatory nierozstrzygniętych operacji w pamięci urządzenia (bez treści rezerwacji). Po błędzie sieciowym ponawia ten sam identyfikator, a po odświeżeniu strony sprawdza `GET /api/bookings/operations/:key`. Endpoint zwraca pierwotny wynik utworzenia, nie aktualny status wizyty; ten jest dostępny w „Moje rezerwacje”.
+
+Kalendarz opiekuna korzysta z `GET /api/sitters/me/schedule`. Oba odczyty kalendarza obsługują parę `from`/`to` (maksymalnie 62 dni), `limit` (domyślnie 100, maksymalnie 200 źródłowych przedziałów) oraz `cursor`; odpowiedź zawiera `nextCursor` i faktyczny zakres `window`. Publiczny przedział może zostać rozbity na kilka wolnych fragmentów. Bez dat zwracane jest okno od dzisiaj UTC przez 62 dni. Profil opiekuna zawiera tylko ograniczony podgląd dostępności; do przeglądania grafiku służy dedykowany endpoint. Interfejs pobiera miesiące na żądanie i obsługuje kolejne strony.
+
+Odczyt kalendarza nie wygasza globalnie rezerwacji. Wygasłe prośby są pomijane podczas obliczania wolnego czasu, a zadanie okresowe aktualizuje je partiami do 500. Utworzenie rezerwacji zwalnia w tej samej transakcji wyłącznie wygasłe prośby kolidujące z konkretnym pupilem lub opiekunem i wybranym przedziałem.
 
 ## Podglad API w UI
 

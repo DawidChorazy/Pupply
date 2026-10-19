@@ -73,6 +73,7 @@ model Account {
   questClaims     QuestClaim[]
   notifications   Notification[]
   pushDevices     PushDevice[]
+  bookingOperations BookingOperation[]
 }
 
 model UserProfile {
@@ -189,12 +190,23 @@ model AvailabilitySlot {
   sitterProfileId String
   startsAt        DateTime
   endsAt          DateTime
+  archivedAt      DateTime?
   createdAt       DateTime      @default(now())
   sitterProfile   SitterProfile @relation(fields: [sitterProfileId], references: [id], onDelete: Cascade)
   bookings        Booking[]
 
-  @@unique([sitterProfileId, startsAt, endsAt])
   @@index([sitterProfileId, startsAt])
+}
+
+model BookingOperation {
+  accountId   String
+  key         String
+  requestHash String
+  result      Json?
+  createdAt   DateTime @default(now())
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, key])
 }
 
 model Booking {

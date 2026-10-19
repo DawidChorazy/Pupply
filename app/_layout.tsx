@@ -40,6 +40,7 @@ export default function RootLayout() {
               <Stack.Screen name="marketplace/book" options={{ headerShown: false }} />
               <Stack.Screen name="marketplace/bookings" options={{ headerShown: false }} />
               <Stack.Screen name="marketplace/sitter-profile" options={{ headerShown: false }} />
+              <Stack.Screen name="marketplace/schedule" options={{ headerShown: false }} />
               <Stack.Screen name="marketplace/notifications" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             </Stack>
