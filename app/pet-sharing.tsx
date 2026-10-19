@@ -6,6 +6,7 @@ import type { Pet } from "@/types/pets";
 import { createPetShare, listPetShares, revokePetShare } from "@/services/pet-sharing-service";
 import type { PetShare } from "@/types/pet-sharing";
 import { marketplaceStyles as styles } from "@/styles/marketplace";
+import QRCode from "react-native-qrcode-svg";
 
 const date = (value: string) => new Date(value).toLocaleString("pl-PL");
 
@@ -88,6 +89,19 @@ export default function PetSharingScreen() {
       {fresh && shares.some(s => s.id === fresh.id && !s.revokedAt && Date.parse(s.expiresAt) > now) ? <View style={styles.card}>
         <Text style={styles.cardTitle}>Link gotowy</Text>
         <Text style={styles.body}>Skopiuj go teraz. Po opuszczeniu tego ekranu możesz utworzyć kolejny link lub cofnąć obecny.</Text>
+
+        <View style={{alignItems: "center", marginVertical: 20}}>
+          <QRCode
+          value={fresh.url}
+          size={220}
+          color="#000000"
+          backgroundColor="#ffffff"
+          quietZone={16}></QRCode>
+          <Text style={[styles.muted, {marginTop: 12}]}>
+            Zeskanuj kod, aby otworzyć kartę pupila
+          </Text>
+        </View>
+
         <TextInput accessibilityLabel="Link do karty pupila" style={[styles.input, { marginTop: 12 }]} value={fresh.url} editable={false} selectTextOnFocus multiline />
         <TouchableOpacity accessibilityRole="button" disabled={busy} style={styles.primaryButton} onPress={() => void run(async () => {
           if (Platform.OS === "web") { await copyLink(fresh.url); setMessage("Skopiowano link do karty pupila."); }
