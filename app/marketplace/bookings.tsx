@@ -80,6 +80,11 @@ export default function BookingsScreen() {
             {booking.note ? <Text style={[styles.body, { marginTop: 8 }]}>{booking.note}</Text> : null}
             {changingId === booking.id ? <ActivityIndicator style={{ marginTop: 12 }} color="#D35400" /> : (
               <View style={styles.wrap}>
+
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/marketplace/chat')}>
+                  <Text style={styles.secondaryButtonText}>Czat</Text>
+                </TouchableOpacity>
+
                 {isSitter && booking.status === "REQUESTED" ? <>
                   <TouchableOpacity style={styles.secondaryButton} onPress={() => changeStatus(booking, "ACCEPTED")}><Text style={styles.secondaryButtonText}>Akceptuj</Text></TouchableOpacity>
                   <TouchableOpacity style={[styles.secondaryButton, styles.dangerButton]} onPress={() => changeStatus(booking, "REJECTED")}><Text style={[styles.secondaryButtonText, styles.dangerButtonText]}>Odrzuć</Text></TouchableOpacity>

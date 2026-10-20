@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import Octicons from '@expo/vector-icons/Octicons';
 import { Text } from "expo-router/react-navigation";
 import { TouchableOpacity, View, Modal, Pressable, ScrollView } from "react-native";
 import { styles } from "../styles";
@@ -74,6 +75,7 @@ export function Header() {
       </View>
         <View style={{ position: "relative", zIndex: 101 }}>
       <TouchableOpacity style={styles.headerIconButton} onPress={() => void toggleNotifications()}>
+        <Octicons style={{alignSelf: "flex-end", top: 16, right: 9, zIndex:102}} name="dot-fill" size={16} color="red" />
         <MaterialCommunityIcons name={unreadCount > 0 ? "bell-badge-outline": "bell-outline"} size={22} color={"#7A3B12"}></MaterialCommunityIcons>
       </TouchableOpacity>
 
