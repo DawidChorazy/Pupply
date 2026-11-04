@@ -1,9 +1,9 @@
-import { googleAuthConfig, getGoogleLoginConfigurationError } from "@/features/auth/google-config";
-import { API_BASE_URL } from '@/constants/api';
-import { Fonts } from '@/constants/theme';
-import { ApiError } from '@/services/api-client';
-import { loginUser, loginWithGoogle } from '@/services/auth-service';
-import { saveAuthTokens } from '@/services/auth-storage';
+import { googleAuthConfig, getGoogleLoginConfigurationError } from "@/features/auth/config/google-config";
+import { API_BASE_URL } from "@/shared/api/config";
+import { Fonts } from "@/shared/theme/theme";
+import { ApiError } from "@/shared/api/api-client";
+import { loginUser, loginWithGoogle } from "@/features/auth/services/auth-service";
+import { saveAuthTokens } from "@/shared/session/auth-storage";
 import { Ionicons } from '@expo/vector-icons';
 import * as Google from 'expo-auth-session/providers/google';
 import { useRouter } from 'expo-router';
@@ -43,7 +43,7 @@ function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLogi
       loginWithGoogle({ idToken })
         .then(async (response) => {
           await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
-          router.replace("/mainScreen/MainScreen");
+          router.replace("/home");
         })
         .catch((requestError) => {
           if (requestError instanceof ApiError) {
@@ -110,7 +110,7 @@ function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLogi
   );
 }
 
-export default function HomeScreen()  {
+export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -143,7 +143,7 @@ export default function HomeScreen()  {
           });
 
           await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
-          router.replace('/mainScreen/MainScreen');
+          router.replace('/home');
         } catch (requestError) {
           if (requestError instanceof ApiError) {
             setError(requestError.message || 'Logowanie nie powiodło się*');
@@ -216,14 +216,14 @@ export default function HomeScreen()  {
                 activeOpacity={0.8}
                 disabled={isSubmitting || isGoogleSubmitting}
                 onPress={loginValidation}// do odkomentowania jak login zadziala i usunąć linie poniżej
-              //  onPress={() => router.push("../mainScreen/MainScreen")}
+              //  onPress={() => router.push("/home")}
               >
                 {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginButtonText}>Zaloguj się</Text>}
               </TouchableOpacity>
 
               <TouchableOpacity 
               style={styles.registerLink}
-              onPress={() => router.push("../register/RegisterScreen")}>
+              onPress={() => router.push("/register")}>
                 <Text style={styles.registerText}>Nie masz konta? Zarejestruj się</Text>
               </TouchableOpacity>
 

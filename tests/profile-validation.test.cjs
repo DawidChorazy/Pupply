@@ -11,7 +11,7 @@ function load(path, globals = {}) {
   vm.runInNewContext(js, { exports, Date, Set, ...globals });
   return exports;
 }
-const { validateProfileForm } = load("features/profile/validation.ts");
+const { validateProfileForm } = load("src/features/profile/utils/validation.ts");
 const valid = {
   fullName: "Anna Kowalska",
   phone: "+48123456789",
@@ -60,7 +60,7 @@ test("name and phone bounds match the API", () => {
     assert.notEqual(validateProfileForm({ ...valid, phone }, now), "");
 });
 test("session changes invalidate captured revision and notify only active subscriptions", () => {
-  const session = load("services/session-events.ts");
+  const session = load("src/shared/session/session-events.ts");
   const captured = session.getSessionRevision();
   let calls = 0;
   const unsubscribe = session.subscribeSessionChanged(() => calls++);
@@ -73,16 +73,16 @@ test("session changes invalidate captured revision and notify only active subscr
 });
 
 function clientHarness(fetch) {
-  const session = load("services/session-events.ts");
+  const session = load("src/shared/session/session-events.ts");
   const saved = [];
-  const client = load("services/api-client.ts", {
+  const client = load("src/shared/api/api-client.ts", {
     Headers,
     Response,
     fetch,
     require: (name) =>
       name.includes("session-events")
         ? session
-        : name.includes("constants/api")
+        : name.includes("shared/api/config")
           ? { API_BASE_URL: "http://api.test" }
           : {
               getRefreshToken: async () => "refresh",

@@ -2,14 +2,14 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "expo-router/react-navigation";
 import { router } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, TouchableOpacity, View, StyleSheet } from "react-native";
 
-import { ApiError } from "@/services/api-client";
-import { searchSitters } from "@/services/sitters-service";
-import { SitterSearchItem, SitterService, SitterServiceType } from "@/types/marketplace";
-import { marketplaceStyles as styles } from "@/styles/marketplace";
-import { CareLocationPicker } from "@/components/forms/care-location-picker";
-import { CareLocation } from "@/services/location-service";
+import { ApiError } from "@/shared/api/api-client";
+import { searchSitters } from "@/features/marketplace/services/sitters-service";
+import { SitterSearchItem, SitterService, SitterServiceType } from "@/features/marketplace/types/marketplace";
+
+import { CareLocationPicker } from "@/features/marketplace/components/CareLocationPicker";
+import { CareLocation } from "@/features/marketplace/services/location-service";
 
 const serviceLabels: Record<SitterServiceType, string> = {
   DOG_WALK: "Spacer",
@@ -83,55 +83,65 @@ export default function SittersScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <MaterialCommunityIcons name="arrow-left" size={22} color="#3D2415" />
-        </TouchableOpacity>
-        <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>Marketplace</Text>
-          <Text style={styles.title}>Znajdź opiekę</Text>
-          <Text style={styles.subtitle}>Wyszukaj aktywnych opiekunów i wolne terminy.</Text>
-        </View>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.label}>Rodzaj usługi</Text>
-        <View style={styles.wrap}>
-          {(Object.keys(serviceLabels) as SitterServiceType[]).map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[styles.chip, serviceType === type && styles.chipActive]}
-              onPress={() => { setServiceType(type); resetResults(); }}
-            >
-              <Text style={[styles.chipText, serviceType === type && styles.chipTextActive]}>{serviceLabels[type]}</Text>
+    <FlatList<SitterSearchItem>
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      data={items}
+      keyExtractor={(sitter) => sitter.id}
+      extraData={selectedServiceIds}
+      ListHeaderComponent={
+        <>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <MaterialCommunityIcons name="arrow-left" size={22} color="#3D2415" />
             </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.divider} />
-        <CareLocationPicker value={location} onChange={changeLocation} />
-        <Text style={styles.label}>Odległość od lokalizacji</Text>
-        <View style={[styles.wrap, { marginBottom: 10 }]}>
-          {[5, 10, 25, 50].map(km => <TouchableOpacity key={km} style={[styles.chip, Number(radius) === km && styles.chipActive]} onPress={() => { setRadius(String(km)); resetResults(); }} accessibilityRole="button" accessibilityState={{ selected: Number(radius) === km }}><Text style={[styles.chipText, Number(radius) === km && styles.chipTextActive]}>Do {km} km</Text></TouchableOpacity>)}
-        </View>
-        <TouchableOpacity style={[styles.primaryButton, isLoading && styles.buttonDisabled]} onPress={load} disabled={isLoading}>
-          {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Szukaj opiekunów</Text>}
-        </TouchableOpacity>
-      </View>
+            <View style={styles.headerCopy}>
+              <Text style={styles.eyebrow}>Marketplace</Text>
+              <Text style={styles.title}>Znajdź opiekę</Text>
+              <Text style={styles.subtitle}>Wyszukaj aktywnych opiekunów i wolne terminy.</Text>
+            </View>
+          </View>
 
-      {error ? <Text style={styles.statusError}>{error}</Text> : null}
-      {!isLoading && !error && hasSearched && items.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.label}>Rodzaj usługi</Text>
+            <View style={styles.wrap}>
+              {(Object.keys(serviceLabels) as SitterServiceType[]).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[styles.chip, serviceType === type && styles.chipActive]}
+                  onPress={() => { setServiceType(type); resetResults(); }}
+                >
+                  <Text style={[styles.chipText, serviceType === type && styles.chipTextActive]}>{serviceLabels[type]}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.divider} />
+            <CareLocationPicker value={location} onChange={changeLocation} />
+            <Text style={styles.label}>Odległość od lokalizacji</Text>
+            <View style={[styles.wrap, { marginBottom: 10 }]}>
+              {[5, 10, 25, 50].map(km => <TouchableOpacity key={km} style={[styles.chip, Number(radius) === km && styles.chipActive]} onPress={() => { setRadius(String(km)); resetResults(); }} accessibilityRole="button" accessibilityState={{ selected: Number(radius) === km }}><Text style={[styles.chipText, Number(radius) === km && styles.chipTextActive]}>Do {km} km</Text></TouchableOpacity>)}
+            </View>
+            <TouchableOpacity style={[styles.primaryButton, isLoading && styles.buttonDisabled]} onPress={load} disabled={isLoading}>
+              {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Szukaj opiekunów</Text>}
+            </TouchableOpacity>
+          </View>
+
+          {error ? <Text style={styles.statusError}>{error}</Text> : null}
+        </>
+      }
+      ListEmptyComponent={!isLoading && !error && hasSearched ? (
         <View style={styles.card}><View style={styles.empty}><Text style={styles.cardTitle}>Brak wyników</Text><Text style={styles.muted}>Zwiększ promień albo wybierz inną usługę.</Text></View></View>
       ) : null}
 
-      {items.map((sitter) => {
+      renderItem={({ item: sitter }) => {
         const service = sitter.services.find(item => item.id === selectedServiceIds[sitter.id]) ?? sitter.services[0];
         const validSlots = sitter.availability.filter((slot) => {
           const duration = (new Date(slot.endsAt).getTime() - new Date(slot.startsAt).getTime()) / 60000;
           return duration >= (service?.durationMinutes ?? Number.POSITIVE_INFINITY);
         });
         return (
-          <View style={styles.card} key={sitter.id}>
+          <View style={styles.card}>
             <View style={styles.spaceBetween}>
               {sitter.photoUrl ? <Image source={{ uri: sitter.photoUrl }} style={{ width: 56, height: 56, borderRadius: 18, marginRight: 12 }} /> : null}
               <View style={styles.headerCopy}>
@@ -155,7 +165,65 @@ export default function SittersScreen() {
             </TouchableOpacity>
           </View>
         );
-      })}
-    </ScrollView>
+      }}
+    />
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#FFF8F0" },
+  content: { padding: 20, paddingBottom: 48 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 20 },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  headerCopy: { flex: 1 },
+  eyebrow: { color: "#D35400", fontSize: 13, fontWeight: "700", marginBottom: 3 },
+  title: { color: "#3D2415", fontSize: 27, fontWeight: "800" },
+  subtitle: { color: "#8A6D5B", fontSize: 13, lineHeight: 18, marginTop: 4 },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F2E4D8",
+    marginBottom: 14
+  },
+  label: { color: "#6F5648", fontSize: 12, fontWeight: "700", marginBottom: 8 },
+  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E7CBB8",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#FFFFFF"
+  },
+  chipActive: { backgroundColor: "#D35400", borderColor: "#D35400" },
+  chipText: { color: "#7A3B12", fontSize: 12, fontWeight: "700" },
+  chipTextActive: { color: "#FFFFFF" },
+  divider: { height: 1, backgroundColor: "#F2E4D8", marginVertical: 12 },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    marginTop: 6
+  },
+  buttonDisabled: { opacity: 0.55 },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  statusError: { color: "#B42318", fontSize: 13, textAlign: "center", marginBottom: 10 },
+  empty: { alignItems: "center", paddingVertical: 24 },
+  cardTitle: { color: "#3D2415", fontSize: 17, fontWeight: "800", marginBottom: 5 },
+  muted: { color: "#9A7D6A", fontSize: 12, lineHeight: 17 },
+  spaceBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  price: { color: "#D35400", fontSize: 15, fontWeight: "800" },
+  body: { color: "#6F5648", fontSize: 13, lineHeight: 19 }
+});

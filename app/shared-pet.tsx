@@ -2,12 +2,11 @@ import { useEffect, useState } from "react";
 import { useIsFocused } from "expo-router/react-navigation";
 import Head from "expo-router/head";
 import * as ExpoLinking from "expo-linking";
-import { ActivityIndicator, AppState, Image, Linking, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { ApiError } from "@/services/api-client";
-import { getSharedDocumentUrl, getSharedPetCard } from "@/services/pet-sharing-service";
-import type { SharedPetCard } from "@/types/pet-sharing";
-import { parsePetAllergies, parsePetIllnesses } from "@/types/pet-health";
-import { marketplaceStyles as styles } from "@/styles/marketplace";
+import { ActivityIndicator, AppState, Image, Linking, Platform, ScrollView, Text, TouchableOpacity, View, StyleSheet } from "react-native";
+import { ApiError } from "@/shared/api/api-client";
+import { getSharedDocumentUrl, getSharedPetCard } from "@/features/pet-sharing/services/pet-sharing-service";
+import type { SharedPetCard } from "@/features/pet-sharing/types/pet-sharing";
+import { parsePetAllergies, parsePetIllnesses } from "@/features/pets/types/pet-health";
 
 function useShareToken() {
   const [token, setToken] = useState<string | null>(null);
@@ -151,3 +150,35 @@ export default function SharedPetScreen() {
     </ScrollView>
   </>;
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#FFF8F0" },
+  content: { padding: 20, paddingBottom: 48 },
+  eyebrow: { color: "#D35400", fontSize: 13, fontWeight: "700", marginBottom: 3 },
+  title: { color: "#3D2415", fontSize: 27, fontWeight: "800" },
+  subtitle: { color: "#8A6D5B", fontSize: 13, lineHeight: 18, marginTop: 4 },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F2E4D8",
+    marginBottom: 14
+  },
+  statusError: { color: "#B42318", fontSize: 13, textAlign: "center", marginBottom: 10 },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    marginTop: 8
+  },
+  secondaryButtonText: { color: "#D35400", fontSize: 13, fontWeight: "800" },
+  muted: { color: "#9A7D6A", fontSize: 12, lineHeight: 17 },
+  cardTitle: { color: "#3D2415", fontSize: 17, fontWeight: "800", marginBottom: 5 },
+  body: { color: "#6F5648", fontSize: 13, lineHeight: 19 },
+  label: { color: "#6F5648", fontSize: 12, fontWeight: "700", marginBottom: 8 }
+});

@@ -110,7 +110,7 @@ const baseUrl = process.env.PUPPLY_WEB_URL || "http://localhost:8081";
       body: status === 204 ? "" : JSON.stringify(body)
     });
   });
-  await page.goto(`${baseUrl}/mainScreen/ProfileScreen`);
+  await page.goto(`${baseUrl}/account/profile`);
   await page
     .getByText("anna@example.test", { exact: true })
     .waitFor({ timeout: 120000 });
@@ -241,7 +241,7 @@ const baseUrl = process.env.PUPPLY_WEB_URL || "http://localhost:8081";
     .getByText("Zaloguj się", { exact: true })
     .filter({ visible: true })
     .click();
-  await page.waitForURL("**/mainScreen/MainScreen");
+  await page.waitForURL("**/home");
   await page.getByText("Profil", { exact: true }).click();
   await page.getByText("jan@example.test", { exact: true }).waitFor();
   await page.getByText("Dodaj pierwszego zwierzaka", { exact: true }).waitFor();

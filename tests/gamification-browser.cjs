@@ -111,7 +111,7 @@ const baseUrl = process.env.PUPPLY_WEB_URL || "http://localhost:8081";
       body: JSON.stringify(body)
     });
   });
-  await page.goto(`${baseUrl}/mainScreen/QuestsScreen`);
+  await page.goto(`${baseUrl}/gamification/quests`);
   await page.getByText("0 pkt", { exact: true }).waitFor();
   assert.equal(await page.getByText("Odbierz", { exact: true }).count(), 0);
   await page.getByText("Dodaj pupila", { exact: true }).click();

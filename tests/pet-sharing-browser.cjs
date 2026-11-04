@@ -59,7 +59,7 @@ const base = process.env.PUPPLY_WEB_URL || "http://localhost:8081";
   const page = await owner.newPage(), shared = await recipient.newPage();
   for (const p of [page, shared]) p.on("pageerror", e => errors.push(e.message));
   try {
-    await page.goto(`${base}/mainScreen/pets/${pet.id}`);
+    await page.goto(`${base}/pets/${pet.id}`);
     await page.getByRole("button", { name: "Udostępnij kartę pupila", exact: true }).click();
     await page.getByLabel("Nazwa udostępnienia").fill("Opiekunka na weekend");
     assert.equal(await page.getByRole("switch", { name: "Dołącz dokumenty PDF" }).isChecked(), false);

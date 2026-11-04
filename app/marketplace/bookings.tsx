@@ -2,13 +2,12 @@ import { useFocusEffect, Text } from "expo-router/react-navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, ScrollView, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, TouchableOpacity, View, StyleSheet } from "react-native";
 
-import { ApiError } from "@/services/api-client";
-import { getAccountId } from "@/services/auth-storage";
-import { listBookings, updateBookingStatus } from "@/services/bookings-service";
-import { Booking, BookingStatus } from "@/types/marketplace";
-import { marketplaceStyles as styles } from "@/styles/marketplace";
+import { ApiError } from "@/shared/api/api-client";
+import { getAccountId } from "@/shared/session/auth-storage";
+import { listBookings, updateBookingStatus } from "@/features/marketplace/services/bookings-service";
+import { Booking, BookingStatus } from "@/features/marketplace/types/marketplace";
 
 const statusLabels: Record<BookingStatus, string> = {
   REQUESTED: "Oczekuje",
@@ -99,3 +98,53 @@ export default function BookingsScreen() {
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#FFF8F0" },
+  content: { padding: 20, paddingBottom: 48 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 20 },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  headerCopy: { flex: 1 },
+  eyebrow: { color: "#D35400", fontSize: 13, fontWeight: "700", marginBottom: 3 },
+  title: { color: "#3D2415", fontSize: 27, fontWeight: "800" },
+  subtitle: { color: "#8A6D5B", fontSize: 13, lineHeight: 18, marginTop: 4 },
+  statusError: { color: "#B42318", fontSize: 13, textAlign: "center", marginBottom: 10 },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F2E4D8",
+    marginBottom: 14
+  },
+  center: { alignItems: "center", justifyContent: "center", paddingVertical: 24 },
+  empty: { alignItems: "center", paddingVertical: 24 },
+  cardTitle: { color: "#3D2415", fontSize: 17, fontWeight: "800", marginBottom: 5 },
+  muted: { color: "#9A7D6A", fontSize: 12, lineHeight: 17 },
+  spaceBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  badge: { borderRadius: 999, backgroundColor: "#FFF0D2", paddingHorizontal: 9, paddingVertical: 5 },
+  badgeText: { color: "#9A4A10", fontSize: 11, fontWeight: "800" },
+  divider: { height: 1, backgroundColor: "#F2E4D8", marginVertical: 12 },
+  body: { color: "#6F5648", fontSize: 13, lineHeight: 19 },
+  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    marginTop: 8
+  },
+  secondaryButtonText: { color: "#D35400", fontSize: 13, fontWeight: "800" },
+  dangerButton: { borderColor: "#B42318" },
+  dangerButtonText: { color: "#B42318" }
+});

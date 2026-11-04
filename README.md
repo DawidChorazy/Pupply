@@ -29,9 +29,17 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend marketplace opiek
 
 ## Struktura projektu
 
-- app/ - frontend Expo Router
-- backend/ - backend API
-- backend/prisma/schema.prisma - model danych
+- `app/` — pełny kod ekranów wraz z lokalnymi stylami oraz layouty Expo Router.
+- `src/features/` — komponenty, hooki, konteksty, komunikacja z API i typy pogrupowane według funkcji aplikacji.
+- `src/shared/` — współdzielone elementy UI, nawigacja, motyw, sesja, klient HTTP i narzędzia.
+- `assets/` — obrazy i zasoby aplikacji.
+- `backend/` — backend API; `backend/prisma/schema.prisma` zawiera model danych.
+- `tests/` — testy regresji frontendu; testy backendu znajdują się obok jego kodu.
+- `docker/` i `ops/` — konfiguracja wdrożenia, monitoringu i kopii zapasowych.
+
+Każdy ekran i komponent definiuje swoje style przez lokalny `StyleSheet.create` na dole pliku. Nie importujemy arkuszy stylów z innych ekranów ani ze wspólnej puli. Wspólne wartości motywu są w `src/shared/theme/theme.ts`.
+
+Szczegółowa mapa i zasady dodawania plików: [Struktura frontendu](docs/frontend-structure.md).
 
 ## Szybki start przez Docker
 

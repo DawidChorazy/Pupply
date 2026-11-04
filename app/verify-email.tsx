@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity } from "react-native";
-import { confirmEmailChange } from "@/services/account-service";
-import { clearAuthTokens } from "@/services/auth-storage";
-import { confirmEmailVerification, requestEmailVerification } from "@/services/auth-service";
-import { marketplaceStyles as styles } from "@/styles/marketplace";
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { confirmEmailChange } from "@/features/account/services/account-service";
+import { clearAuthTokens } from "@/shared/session/auth-storage";
+import { confirmEmailVerification, requestEmailVerification } from "@/features/auth/services/auth-service";
 
 export default function VerifyEmailScreen() {
   const params = useLocalSearchParams<{ token?: string; kind?: string }>();
@@ -38,3 +37,32 @@ export default function VerifyEmailScreen() {
     <TouchableOpacity style={styles.secondaryButton} onPress={() => router.canGoBack() ? router.back() : router.replace("/")}><Text style={styles.secondaryButtonText}>Wróć</Text></TouchableOpacity>
   </ScrollView>;
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#FFF8F0" },
+  content: { padding: 20, paddingBottom: 48 },
+  title: { color: "#3D2415", fontSize: 27, fontWeight: "800" },
+  body: { color: "#6F5648", fontSize: 13, lineHeight: 19 },
+  statusError: { color: "#B42318", fontSize: 13, textAlign: "center", marginBottom: 10 },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    marginTop: 6
+  },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    marginTop: 8
+  },
+  secondaryButtonText: { color: "#D35400", fontSize: 13, fontWeight: "800" }
+});

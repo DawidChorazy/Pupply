@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity } from "react-native";
-import { requestPasswordReset, resetPassword } from "@/services/auth-service";
-import { marketplaceStyles as styles } from "@/styles/marketplace";
+import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { requestPasswordReset, resetPassword } from "@/features/auth/services/auth-service";
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams<{ token?: string }>();
@@ -42,3 +41,43 @@ export default function ResetPasswordScreen() {
     <TouchableOpacity style={styles.secondaryButton} onPress={() => router.replace("/")}><Text style={styles.secondaryButtonText}>Przejdź do logowania</Text></TouchableOpacity>
   </ScrollView>;
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#FFF8F0" },
+  content: { padding: 20, paddingBottom: 48 },
+  title: { color: "#3D2415", fontSize: 27, fontWeight: "800" },
+  body: { color: "#6F5648", fontSize: 13, lineHeight: 19 },
+  input: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#FFF8F0",
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    paddingHorizontal: 14,
+    color: "#3D2415",
+    fontSize: 14,
+    marginBottom: 10
+  },
+  statusError: { color: "#B42318", fontSize: 13, textAlign: "center", marginBottom: 10 },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    marginTop: 6
+  },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    marginTop: 8
+  },
+  secondaryButtonText: { color: "#D35400", fontSize: 13, fontWeight: "800" }
+});
