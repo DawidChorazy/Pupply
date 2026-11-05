@@ -5,6 +5,7 @@ import { SitterPhotoPicker } from "@/features/marketplace/components/SitterPhoto
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PrimaryButton, SecondaryButton } from "../components/Buttons";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -235,12 +236,13 @@ export default function ProfileScreen() {
             {error ? (
               <View>
                 <Text style={styles.error}>{error}</Text>
-                <TouchableOpacity
+                <PrimaryButton children="Spróbuj ponownie" accessibilityRole="button" onPress={() => void load()}/>
+                {/* <TouchableOpacity
                   onPress={() => void load()}
                   accessibilityRole="button"
                 >
                   <Text style={styles.link}>Spróbuj ponownie</Text>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
               </View>
             ) : null}
             {profile ? (
@@ -251,6 +253,7 @@ export default function ProfileScreen() {
                     ? "E-mail zweryfikowany"
                     : "E-mail niezweryfikowany"}
                 </Text>
+                
                 <TouchableOpacity onPress={() => router.push("/account/settings" as never)}><Text style={styles.link}>Ustawienia konta i powiadomień</Text></TouchableOpacity>
                 {!profile.emailVerifiedAt ? <TouchableOpacity onPress={() => router.push("/verify-email" as never)}><Text style={styles.link}>Potwierdź e-mail</Text></TouchableOpacity> : null}
                 {editing ? (
@@ -297,7 +300,15 @@ export default function ProfileScreen() {
                           <Text style={styles.buttonText}>Zapisz</Text>
                         )}
                       </TouchableOpacity>
-                      <TouchableOpacity
+
+                      <SecondaryButton children="Anuluj" style={styles.link} disabled={saving}
+                        onPress={() => {
+                          setEditing(false);
+                          setForm(toForm(profile));
+                          setSaveError("");
+                        }}
+                        accessibilityRole="button"/>
+                      {/* <TouchableOpacity
                         style={styles.secondaryButton}
                         disabled={saving}
                         onPress={() => {
@@ -308,7 +319,7 @@ export default function ProfileScreen() {
                         accessibilityRole="button"
                       >
                         <Text style={styles.link}>Anuluj</Text>
-                      </TouchableOpacity>
+                      </TouchableOpacity> */}
                     </View>
                   </>
                 ) : (
