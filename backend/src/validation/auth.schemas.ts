@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { nipSchema } from "./clinic.schemas";
 
 export const passwordSchema = z
   .string()
@@ -60,7 +61,7 @@ export const registerUserSchema = z
 export const registerClinicSchema = z
   .object({
     clinicName: z.string().trim().min(2).max(120),
-    nip: z.string().trim().regex(/^\d{10}$/, "NIP must contain exactly 10 digits"),
+    nip: nipSchema,
     email: z.string().trim().email().transform((value) => value.toLowerCase()),
     phone: phoneSchema,
     password: passwordSchema,

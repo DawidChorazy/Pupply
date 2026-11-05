@@ -13,6 +13,15 @@ export const notFoundHandler: RequestHandler = (req, res) => {
 };
 
 export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
+  if (error?.type === "entity.parse.failed" || error?.type === "entity.too.large") {
+    const tooLarge = error.type === "entity.too.large";
+    res.status(tooLarge ? 413 : 400).json({
+      error: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_JSON",
+      message: tooLarge ? "Request body is too large" : "Request body must be valid JSON",
+      requestId: req.requestId
+    });
+    return;
+  }
   if (error instanceof ZodError) {
     res.status(400).json({
       error: "VALIDATION_ERROR",
@@ -20,6 +29,11 @@ export const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
       details: error.flatten().fieldErrors,
       requestId: req.requestId
     });
+    return;
+  }
+
+  if (error instanceof Prisma.PrismaClientUnknownRequestError && error.message.includes("23P01")) {
+    res.status(409).json({ error: "TIME_CONFLICT", message: "Wybrany termin koliduje z istniejącą dostępnością lub rezerwacją.", requestId: req.requestId });
     return;
   }
 

@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { z } from "zod";
+import { confirmEmailChange } from "../services/account.service";
 
 import {
   confirmEmailVerification,
@@ -32,6 +34,10 @@ import {
 const authRouter = Router();
 
 authRouter.use(authRateLimiter);
+authRouter.post("/email-change/confirm", asyncHandler(async (req, res) => {
+  await confirmEmailChange(z.object({ token: z.string().min(20) }).parse(req.body).token);
+  res.status(204).send();
+}));
 
 authRouter.post(
   "/register/user",

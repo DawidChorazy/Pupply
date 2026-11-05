@@ -1,10 +1,10 @@
-import { API_BASE_URL } from '@/constants/api';
-import { Fonts } from '@/constants/theme';
-import { ApiError } from '@/services/api-client';
-import { loginUser, loginWithGoogle } from '@/services/auth-service';
-import { saveAuthTokens } from '@/services/auth-storage';
+import { googleAuthConfig, getGoogleLoginConfigurationError } from "@/features/auth/config/google-config";
+import { API_BASE_URL } from "@/shared/api/config";
+import { Fonts } from "@/shared/theme/theme";
+import { ApiError } from "@/shared/api/api-client";
+import { loginUser, loginWithGoogle } from "@/features/auth/services/auth-service";
+import { saveAuthTokens } from "@/shared/session/auth-storage";
 import { Ionicons } from '@expo/vector-icons';
-import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -13,28 +13,7 @@ import { ActivityIndicator, Dimensions, Platform, StyleSheet, Text, TextInput, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get("window");
-const missingGoogleClientId = "missing-google-client-id";
-const googleWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.trim();
-const googleAndroidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?.trim();
-const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
-const googleRedirectUri =
-  Platform.OS === "web"
-    ? AuthSession.makeRedirectUri({ path: "" })
-    : process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI?.trim();
-
 WebBrowser.maybeCompleteAuthSession();
-
-function getGoogleClientIdForPlatform() {
-  if (Platform.OS === "android") {
-    return googleAndroidClientId;
-  }
-
-  if (Platform.OS === "ios") {
-    return googleIosClientId;
-  }
-
-  return googleWebClientId;
-}
 
 type GoogleLoginButtonProps = {
   disabled: boolean;
@@ -44,15 +23,8 @@ type GoogleLoginButtonProps = {
 
 function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLoginButtonProps) {
   const router = useRouter();
-  const googleClientIdConfigured = Boolean(getGoogleClientIdForPlatform());
-  const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest({
-    clientId: missingGoogleClientId,
-    webClientId: googleWebClientId || missingGoogleClientId,
-    androidClientId: googleAndroidClientId || missingGoogleClientId,
-    iosClientId: googleIosClientId || missingGoogleClientId,
-    redirectUri: googleRedirectUri,
-    selectAccount: true
-  });
+  const googleConfigurationError = getGoogleLoginConfigurationError();
+  const [googleRequest, googleResponse, promptGoogleSignIn] = Google.useIdTokenAuthRequest(googleAuthConfig);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -71,7 +43,7 @@ function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLogi
       loginWithGoogle({ idToken })
         .then(async (response) => {
           await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
-          router.replace("/mainScreen/MainScreen");
+          router.replace("/home");
         })
         .catch((requestError) => {
           if (requestError instanceof ApiError) {
@@ -89,15 +61,15 @@ function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLogi
     }
 
     if (googleResponse.type === "error") {
-      onError(googleResponse.error?.message || "Logowanie Google nie powiodło się*");
+      onError(googleResponse.error?.description || "Logowanie Google nie powiodło się*");
     }
     setIsSubmitting(false);
     onSubmittingChange(false);
   }, [googleResponse, onError, onSubmittingChange, router]);
 
   const handlePress = async () => {
-    if (!googleClientIdConfigured) {
-      onError("Brak konfiguracji Google Client ID dla tej platformy*");
+    if (googleConfigurationError) {
+      onError(googleConfigurationError);
       return;
     }
 
@@ -123,7 +95,7 @@ function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLogi
     <TouchableOpacity
       style={styles.googleButton}
       activeOpacity={0.8}
-      disabled={disabled || isSubmitting || !googleRequest}
+      disabled={disabled || isSubmitting || (!googleConfigurationError && !googleRequest)}
       onPress={handlePress}
     >
       {isSubmitting ? (
@@ -138,7 +110,7 @@ function GoogleLoginButton({ disabled, onError, onSubmittingChange }: GoogleLogi
   );
 }
 
-export default function HomeScreen()  {
+export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -171,7 +143,7 @@ export default function HomeScreen()  {
           });
 
           await saveAuthTokens(response.accessToken, response.refreshToken, response.account.id);
-          router.replace('/mainScreen/MainScreen');
+          router.replace('/home');
         } catch (requestError) {
           if (requestError instanceof ApiError) {
             setError(requestError.message || 'Logowanie nie powiodło się*');
@@ -238,19 +210,20 @@ export default function HomeScreen()  {
                 </TouchableOpacity>
               )}
 
+              <TouchableOpacity onPress={() => router.push("/reset-password" as never)}><Text style={styles.googleButtonText}>Nie pamiętam hasła</Text></TouchableOpacity>
               <TouchableOpacity 
                 style={styles.loginButton}
                 activeOpacity={0.8}
                 disabled={isSubmitting || isGoogleSubmitting}
                 onPress={loginValidation}// do odkomentowania jak login zadziala i usunąć linie poniżej
-               // onPress={() => router.push("../mainScreen/MainScreen")}
+              //  onPress={() => router.push("/home")}
               >
                 {isSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.loginButtonText}>Zaloguj się</Text>}
               </TouchableOpacity>
 
               <TouchableOpacity 
               style={styles.registerLink}
-              onPress={() => router.push("../register/RegisterScreen")}>
+              onPress={() => router.push("/register")}>
                 <Text style={styles.registerText}>Nie masz konta? Zarejestruj się</Text>
               </TouchableOpacity>
 

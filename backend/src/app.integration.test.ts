@@ -15,6 +15,7 @@ async function registerUser(suffix: string) {
     confirmPassword: password
   });
   expect(response.status).toBe(201);
+  await prisma.account.update({ where: { id: response.body.account.id }, data: { emailVerifiedAt: new Date() } });
   return response.body as { accessToken: string; refreshToken: string; account: { id: string } };
 }
 
@@ -77,6 +78,7 @@ describe("API integration", () => {
     expect(updated.status).toBe(200);
     expect(updated.body.profile.fullName).toBe("Updated Owner");
 
+    await prisma.account.update({ where: { id: owner.account.id }, data: { emailVerifiedAt: null } });
     const verification = await request(app)
       .post("/api/auth/email-verification/request")
       .set("Authorization", `Bearer ${owner.accessToken}`);
@@ -98,7 +100,7 @@ describe("API integration", () => {
   it("supports the minimal clinic profile API", async () => {
     const clinic = await request(app).post("/api/auth/register/clinic").send({
       clinicName: "Pupply Vet",
-      nip: "1234567890",
+      nip: "1234563218",
       email: "clinic@example.com",
       phone: "+48111111111",
       password,

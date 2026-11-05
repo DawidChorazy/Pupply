@@ -1,0 +1,161 @@
+import { Review, ReviewSummary } from "@/features/reviews/types/reviews";
+
+export type SitterServiceType = "DOG_WALK" | "DROP_IN" | "DAY_CARE";
+export type BookingStatus = "REQUESTED" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "EXPIRED";
+export type BookingPerspective = "owner" | "sitter" | "all";
+
+export interface Pagination {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface SitterService {
+  id: string;
+  sitterProfileId: string;
+  type: SitterServiceType;
+  durationMinutes: number;
+  priceCents: number;
+  currency: "PLN";
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AvailabilitySlot {
+  id: string;
+  sitterProfileId: string;
+  startsAt: string;
+  endsAt: string;
+  createdAt: string;
+  bookings?: ScheduleBooking[];
+}
+
+export interface ScheduleBooking {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: BookingStatus;
+  pet: { name: string };
+  sitterService: { type: SitterServiceType };
+}
+
+export interface SitterProfile {
+  id: string;
+  accountId: string;
+  bio: string;
+  city: string;
+  region: string | null;
+  photoKey: string | null;
+  photoUrl: string | null;
+  latitude: number;
+  longitude: number;
+  serviceRadiusKm: number;
+  isActive: boolean;
+  services: SitterService[];
+  availability: AvailabilitySlot[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SitterSearchItem {
+  ratingSummary?: ReviewSummary;
+  id: string;
+  displayName: string;
+  bio: string;
+  city: string;
+  region: string | null;
+  photoUrl: string | null;
+  serviceRadiusKm: number;
+  distanceKm: number;
+  services: SitterService[];
+  availability: AvailabilitySlot[];
+}
+
+export interface SitterServiceInput {
+  type: SitterServiceType;
+  durationMinutes: number;
+  priceCents: number;
+  isActive?: boolean;
+}
+
+export interface CreateSitterProfilePayload {
+  bio: string;
+  city: string;
+  region?: string | null;
+  photoKey?: string | null;
+  latitude: number;
+  longitude: number;
+  serviceRadiusKm: number;
+  isActive: boolean;
+  services: SitterServiceInput[];
+}
+
+export type UpdateSitterProfilePayload = Partial<CreateSitterProfilePayload>;
+
+export interface SearchSittersParams {
+  minRating?: number;
+  latitude: number;
+  longitude: number;
+  radiusKm?: number;
+  serviceType?: SitterServiceType;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface Booking {
+  review?: Review | null;
+  id: string;
+  ownerAccountId: string;
+  sitterAccountId: string;
+  petId: string;
+  sitterServiceId: string;
+  availabilitySlotId: string;
+  status: BookingStatus;
+  startsAt: string;
+  endsAt: string;
+  expiresAt: string;
+  priceCents: number;
+  currency: "PLN";
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+  pet: { id: string; name: string; breed: string | null };
+  owner: { id: string; userProfile: { fullName: string } | null };
+  sitter: { id: string; userProfile: { fullName: string } | null };
+  sitterService: SitterService;
+  availabilitySlot: AvailabilitySlot;
+}
+
+export interface CreateBookingPayload {
+  petId: string;
+  sitterServiceId: string;
+  availabilitySlotId: string;
+  startsAt?: string;
+  durationMinutes?: number;
+  expectedPriceCents?: number;
+  note?: string;
+}
+
+export type CreateBookingsPayload = Omit<CreateBookingPayload, "availabilitySlotId" | "startsAt"> & {
+  slots: { availabilitySlotId: string; startsAt: string }[];
+};
+
+export interface ListBookingsParams {
+  perspective?: BookingPerspective;
+  status?: BookingStatus;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedSittersResponse {
+  items: SitterSearchItem[];
+  pagination: Pagination;
+}
+
+export interface PaginatedBookingsResponse {
+  items: Booking[];
+  pagination: Pagination;
+}
