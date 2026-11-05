@@ -174,6 +174,11 @@ Odczyt kalendarza nie wygasza globalnie rezerwacji. Wygasłe prośby są pomijan
 - Surowa specyfikacja OpenAPI: http://localhost:4000/openapi.json
 - Konsola MinIO: http://localhost:9001 (lokalnie minioadmin/minioadmin)
 
+MinIO i klient `mc` są budowane lokalnie z przypiętych commitów oficjalnych
+repozytoriów, przez `ops/minio/Dockerfile`. Dawne obrazy społecznościowe
+`minio/minio` i `minio/mc` nie są już publicznie dostępne. Pierwszy build
+potrzebuje dostępu do GitHuba i modułów Go; kolejne korzystają z cache.
+
 ## Testy backendu
 
 - Utworz osobna baze testowa zgodnie z backend/.env.test.example
