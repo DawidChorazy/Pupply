@@ -20,6 +20,7 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend marketplace opiek
 - Profile opiekunow, uslugi i dostepnosc: /api/sitters
 - Rezerwacje spacerow i opieki: /api/bookings
 - Powiadomienia: /api/notifications
+- Prywatny czat właściciel–opiekun: /api/conversations, historia i nieprzeczytane; [opis i testy](docs/chat.md)
 - Podpisane uploady zdjec: POST /api/uploads/pet-photo
 - Udostępnianie karty pupila: link bez logowania, ważny 7 dni, z możliwością cofnięcia i opcjonalnymi PDF-ami
 - Healthcheck backendu: GET /api/health
@@ -122,23 +123,42 @@ Publiczny serwer Photon nie wymaga klucza API, ale nie gwarantuje dostępności.
 
 ## Profil opiekuna
 
+Zdjęcie konta na ekranie **Profil** zapisuje się automatycznie po wybraniu pliku.
+Po ponownym wejściu jest pobierane z backendu; „Usuń” trwale usuwa powiązanie z kontem.
+Nie wymaga to założenia oferty opiekuna. Awatar konta jest widoczny również w czacie,
+a zdjęcie oferty opiekuna nadal można ustawić niezależnie w formularzu poniżej.
+API: `POST /api/uploads/profile-photo`, upload pliku i `PATCH /api/users/me` z `photoKey`
+(lub `null`, aby usunąć). `GET /api/users/me` zwraca `photoKey` i `photoUrl`.
+Stare, nieużywane pliki sprząta istniejące zadanie po upływie doby. Zastosuj migrację
+`20261105150000_user_profile_photo` i wygeneruj klienta Prisma przed uruchomieniem.
+
 Formularz „Zostań opiekunem” zapisuje opis, miejscowość i województwo, zasięg działania, opcjonalne zdjęcie oraz do 20 ofert z osobnymi cenami. Można dodać kilka wariantów jednej usługi o różnym czasie. Cena dotyczy podanego minimalnego czasu usługi. Dłuższa rezerwacja kosztuje proporcjonalnie więcej według tej stawki. Usunięte warianty zostają nieaktywne w bazie, aby zachować historię rezerwacji.
 
 Zdjęcia są przesyłane przez `POST /api/uploads/sitter-photo` do storage i przypisane do konta opiekuna. Przed zapisaniem backend sprawdza własność i istnienie zdjęcia. Wstrzymanie widoczności profilu nie usuwa istniejących rezerwacji. Dodanie i usunięcie dostępności zapisuje się od razu, a pozostałe zmiany po kliknięciu „Zapisz”.
 
 Po aktualizacji zastosuj migracje (`npx prisma migrate deploy` w `backend`) oraz wygeneruj klienta (`npm run backend:prisma:generate`). Przy korzystaniu z telefonu `S3_PUBLIC_ENDPOINT` i `S3_PUBLIC_BASE_URL` w `backend/.env` muszą wskazywać dostępny w LAN adres komputera, tak samo jak API; `localhost` na telefonie nie prowadzi do MinIO na komputerze.
 
+### Rodzaje usług
+
+- **Spacer** — spacer ze zwierzakiem w okolicy.
+- **Wizyta domowa** — opiekun przychodzi do domu właściciela.
+- **Opieka u opiekuna** — właściciel przywozi zwierzaka do domu opiekuna i odbiera go po opiece.
+
+Dwie formy opieki różnią się miejscem, a nie czasem: wizytę domową też można wydłużyć.
+Dokładny adres i szczegóły przekazania pupila strony ustalają na czacie.
+W API zachowane są typy `DROP_IN` i `DAY_CARE`; istniejące oferty i rezerwacje pozostają powiązane z tymi samymi usługami.
+
 ## Kalendarz i grafik opiekuna
 
-Na ekranie głównym wybierz **Mój grafik**. Kalendarz jest też dostępny pod profilem opiekuna. Zaznacz kilka dni w kalendarzu (ponowne kliknięcie odznacza dzień), a następnie ustaw dla nich wspólne godziny jednym zapisem. Wybierz gotowy zakres (rano, popołudnie lub cały dzień) albo ustaw początek i koniec przez wybór godziny. Opcjonalna przerwa dzieli dostępność na dwa przedziały i wyłącza ten czas z rezerwacji.
+Na ekranie głównym wybierz **Mój grafik**. Kalendarz jest też dostępny pod profilem opiekuna. Domyślnie kliknięcie daty otwiera podgląd jednego dnia. Przełącz na **Kilka dni**, aby jawnie zaznaczyć daty do wspólnej zmiany. **Dodaj godziny** otwiera osobny formularz; zapis zamyka okno, pokazuje wynik i wraca do podglądu dnia. Na komputerze godziny i działania są obok kalendarza. Wybierz gotowy zakres (rano, popołudnie lub cały dzień) albo ustaw początek i koniec przez wybór godziny. Przycisk „Dodaj przerwę” pozwala dodać do pięciu przerw dziennie, każdą z osobnymi godzinami i możliwością usunięcia. Wybór godzin uwzględnia zakres pracy oraz sąsiednie przerwy. Przerwy wyłączają ten czas z rezerwacji i powtarzają się we wszystkich zaznaczonych dniach. Gotowe zakresy zachowują pasujące przerwy, a o usunięciu przerw poza nowymi godzinami informuje komunikat.
 
 Opcja **Powtórz w wybrane dni** dodaje te same godziny na wybrane dni tygodnia przez 1, 2 lub 4 tygodnie od zaznaczonej daty. To zapis konkretnych dni, bez automatycznego przedłużania. Godziny pozostają lokalne również przy zmianie czasu. Cały grafik zapisuje się jednym żądaniem: jeśli którykolwiek przedział koliduje z zapisanym grafikiem, żaden nowy termin nie zostaje dodany.
 
-Zielone znaczniki pokazują wolne godziny, a bursztynowe — aktywne rezerwacje. Po wybraniu dnia zobaczysz przedziały dostępności, pozostałe wolne godziny i wizyty. Ikona ołówka pozwala zmienić przyszły jednodniowy przedział. Nowe godziny muszą obejmować aktywne przyszłe wizyty. Anulowane, odrzucone, wygasłe i zakończone wizyty nie blokują zmian. Usunięcie przedziału bez aktywnych wizyt archiwizuje go i zamyka godziny dla nowych rezerwacji, zachowując historię i zapisane kwoty. Ten sam przedział można później otworzyć ponownie jako nową dostępność.
+Zielone znaczniki pokazują wolne godziny, a bursztynowe — aktywne rezerwacje. Po wybraniu dnia zobaczysz przedziały dostępności, pozostałe wolne godziny i wizyty. Ikona ołówka pozwala zmienić przyszły jednodniowy przedział. Nowe godziny muszą obejmować aktywne przyszłe wizyty. Anulowane, odrzucone, wygasłe i zakończone wizyty nie blokują zmian. Usunięcie przedziału bez aktywnych wizyt archiwizuje go i zamyka godziny dla nowych rezerwacji, zachowując historię i zapisane kwoty. **Cofnij usunięcie** przywraca oryginalne godziny i identyfikatory przedziałów. Kosz usuwa pojedynczy przedział bez dodatkowego pytania; **Usuń wolne przedziały** usuwa je z całego dnia lub zaznaczonych dat jednym żądaniem. Przedziały z aktywnymi rezerwacjami są pomijane przez wybór zbiorczy. Usunięcie starego przedziału obejmującego kilka dni wymaga potwierdzenia jego pełnego zakresu. Przywrócenie odmawia zapisu, jeśli nowe godziny już zajęły to miejsce.
 
 Przy wyszukiwaniu opieki wybierz **Wybierz dzień i godzinę**. Kalendarz proponuje początki co 15 minut, uwzględniając długość usługi i pozostałe wolne przedziały. Możesz zaznaczyć kilka dni i wybrać wspólną wolną godzinę dla wszystkich. Wybierz również czas opieki: gotowy wariant lub przyciski ±15 minut. Minimalny czas wynika z wybranej oferty, maksymalny wynosi 24 godziny. Cena rośnie proporcjonalnie: przy 30 zł za 30 minut, 60 minut kosztuje 60 zł. Podsumowanie pokazuje cenę za wizytę i sumę za wszystkie dni. Każda wizyta musi w całości zmieścić się w jednym wolnym przedziale. Rezerwacja wysyła wybraną godzinę i długość opieki; serwer ponownie sprawdza dostępność i sam wylicza cenę. Zmiana ceny od wyświetlenia oferty wymaga ponownego sprawdzenia kwoty. Kilka dni zapisuje się atomowo: kolizja dowolnego terminu cofa cały zapis nowych rezerwacji i powiadomień. Jeśli ktoś w międzyczasie zajmie termin, kalendarz się odświeża i prosi o ponowny wybór.
 
-API: `POST /api/sitters/me/availability/batch` (do 56 przedziałów, zapis atomowy), `PATCH /api/sitters/me/availability/:slotId` i publiczne `GET /api/sitters/:profileId/availability?sitterServiceId=…`. Publiczne API zwraca wyłącznie usługę i wolne przedziały; nie zwraca danych rezerwacji ani pupili. Rezerwacje przyjmują opcjonalne `durationMinutes` i `expectedPriceCents` (cena jednej wizyty). `POST /api/bookings/batch` przyjmuje do 28 terminów ze wspólnym pupilem, usługą, czasem i ceną oczekiwaną; zwraca rezerwacje i `totalPriceCents`. Poprawki niezawodności wymagają migracji `20261019220000_schedule_reliability` oraz ponownego wygenerowania klienta Prisma.
+API: `POST /api/sitters/me/availability/batch` (do 168 przedziałów: 28 dni z pięcioma przerwami, zapis atomowy), `PATCH /api/sitters/me/availability/:slotId`, `POST /api/sitters/me/availability/archive`, `POST /api/sitters/me/availability/restore` (lista `slotIds`, do 168; operacje atomowe i bezpieczne przy ponowieniu) i publiczne `GET /api/sitters/:profileId/availability?sitterServiceId=…`. Publiczne API zwraca wyłącznie usługę i wolne przedziały; nie zwraca danych rezerwacji ani pupili. Rezerwacje przyjmują opcjonalne `durationMinutes` i `expectedPriceCents` (cena jednej wizyty). `POST /api/bookings/batch` przyjmuje do 28 terminów ze wspólnym pupilem, usługą, czasem i ceną oczekiwaną; zwraca rezerwacje i `totalPriceCents`. Poprawki niezawodności wymagają migracji `20261019220000_schedule_reliability` oraz ponownego wygenerowania klienta Prisma.
 
 Rezerwacje ponawiają transakcję przy przejściowych konfliktach bazy (maksymalnie 5 prób). Rzeczywista kolizja terminu zwraca `409`, a wyczerpanie prób `503 BOOKING_BUSY`. Klient wysyła `Idempotency-Key`: ponowienie tej samej operacji odtwarza jej pierwotny wynik bez dodatkowych rezerwacji i powiadomień. Klucz, skrót danych i wynik są zapisywane w tej samej transakcji co wizyty. Ponowne użycie klucza z innymi danymi zwraca `409 IDEMPOTENCY_KEY_REUSED`. Klucze są przypisane do konta i zachowywane do jego usunięcia; nagłówek pozostaje opcjonalny dla starszych klientów API.
 
@@ -184,9 +204,18 @@ Odczyt kalendarza nie wygasza globalnie rezerwacji. Wygasłe prośby są pomijan
 ## Poza zakresem obecnego MVP
 
 - Platnosci online
-- Czat
-- Oceny opiekunow
 - Pelny modul obslugi klinik
+
+## Oceny spacerowiczów
+
+Po zakończonym spacerze właściciel może wybrać **Moje rezerwacje → Oceń spacerowicza**.
+Ocena obejmuje punktualność, kontakt i jakość spaceru (każde od 1 do 5), z opcjonalną
+opinią publiczną. Jeden spacer ma jedną ocenę, bez późniejszej edycji. Ponowienie
+zapisu po błędzie sieci nie tworzy duplikatu.
+
+Wyszukiwarka pokazuje średnią, liczbę opinii i zakończonych spacerów oraz filtr
+minimalnej oceny. **Zobacz opinie** otwiera publiczną listę opinii. Brak ocen jest
+pokazywany jako „Brak ocen”. Szczegóły API i zasad: [docs/reviews.md](docs/reviews.md).
 
 ## Questy i ranking
 

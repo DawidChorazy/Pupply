@@ -13,8 +13,7 @@ import { getSitterAvailability } from "@/features/marketplace/services/sitters-s
 import { AvailabilitySlot, SitterService } from "@/features/marketplace/types/marketplace";
 import { Pet } from "@/features/pets/types/pets";
 import { marketplaceStyles as styles } from "@/features/marketplace/styles/marketplace";
-
-const labels = { DOG_WALK: "Spacer", DROP_IN: "Wizyta domowa", DAY_CARE: "Opieka dzienna" };
+import { SERVICE_LABELS as labels, SERVICE_DESCRIPTIONS } from "@/features/marketplace/services/service-catalog";
 
 export default function BookScreen() {
   const params = useLocalSearchParams<{ sitterId?: string; sitterName?: string; sitterServiceId?: string }>();
@@ -141,6 +140,8 @@ export default function BookScreen() {
     <View style={styles.card}>
       <View style={styles.spaceBetween}><View style={styles.headerCopy}><Text style={styles.cardTitle}>Wybierz termin</Text><Text style={styles.muted}>{service ? `${labels[service.type]} · ${(service.priceCents / 100).toFixed(2)} zł / ${durationLabel(service.durationMinutes)}` : "Wolne godziny opiekuna"}</Text></View><TouchableOpacity style={local.refresh} disabled={scheduleLoading || isSubmitting} accessibilityRole="button" accessibilityLabel="Odśwież wolne terminy" onPress={loadSchedule}><MaterialCommunityIcons name="refresh" size={22} color="#D35400" /></TouchableOpacity></View>
       {scheduleLoading ? <View style={styles.center}><ActivityIndicator color="#D35400" /><Text style={styles.muted}>Sprawdzam dostępność…</Text></View> : scheduleError ? <View><Text style={[styles.statusError, { marginTop: 14 }]} accessibilityRole="alert">{scheduleError}</Text><TouchableOpacity style={styles.secondaryButton} accessibilityRole="button" onPress={loadSchedule}><Text style={styles.secondaryButtonText}>Spróbuj ponownie</Text></TouchableOpacity><TouchableOpacity style={styles.secondaryButton} accessibilityRole="button" onPress={() => router.push("/marketplace/sitters" as never)}><Text style={styles.secondaryButtonText}>Wybierz opiekuna</Text></TouchableOpacity></View> : service ? <>
+        <Text style={[styles.body, { marginTop: 12 }]}>{SERVICE_DESCRIPTIONS[service.type]}</Text>
+        {service.type !== "DOG_WALK" ? <Text style={[styles.muted, { marginTop: 6 }]}>Dokładny adres i szczegóły przekazania pupila ustalcie z opiekunem na czacie.</Text> : null}
         <Text style={[styles.label, { marginTop: 16 }]}>Jak długo ma trwać opieka?</Text>
         <View style={styles.wrap}>{[1, 2, 3, 4].map(multiplier => service.durationMinutes * multiplier).filter(minutes => minutes <= 1440).map(minutes => <TouchableOpacity key={minutes} style={[styles.chip, durationMinutes === minutes && styles.chipActive]} disabled={isSubmitting} accessibilityRole="button" accessibilityLabel={`Czas opieki: ${durationLabel(minutes)}`} accessibilityState={{ selected: durationMinutes === minutes }} onPress={() => changeDuration(minutes)}><Text style={[styles.chipText, durationMinutes === minutes && styles.chipTextActive]}>{durationLabel(minutes)}</Text></TouchableOpacity>)}</View>
         <View style={local.durationRow}>

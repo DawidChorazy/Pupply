@@ -8,6 +8,8 @@ import { ApiError } from "@/shared/api/api-client";
 import { getAccountId } from "@/shared/session/auth-storage";
 import { listBookings, updateBookingStatus } from "@/features/marketplace/services/bookings-service";
 import { Booking, BookingStatus } from "@/features/marketplace/types/marketplace";
+import { ReviewDetails } from "@/features/reviews/components/ReviewDetails";
+import { SERVICE_LABELS, SERVICE_DESCRIPTIONS } from "@/features/marketplace/services/service-catalog";
 
 const statusLabels: Record<BookingStatus, string> = {
   REQUESTED: "Oczekuje",
@@ -74,15 +76,20 @@ export default function BookingsScreen() {
               <View style={styles.badge}><Text style={styles.badgeText}>{statusLabels[booking.status]}</Text></View>
             </View>
             <View style={styles.divider} />
+            <Text style={styles.body}>{SERVICE_LABELS[booking.sitterService.type]}</Text>
+            {booking.sitterService.type !== "DOG_WALK" ? <Text style={styles.muted}>{SERVICE_DESCRIPTIONS[booking.sitterService.type]}</Text> : null}
             <Text style={styles.body}>{new Date(booking.startsAt).toLocaleString("pl-PL")}</Text>
             <Text style={styles.muted}>{Math.round((Date.parse(booking.endsAt) - Date.parse(booking.startsAt)) / 60_000)} min • {(booking.priceCents / 100).toFixed(2)} zł</Text>
             {booking.note ? <Text style={[styles.body, { marginTop: 8 }]}>{booking.note}</Text> : null}
+            {booking.review ? <><Text style={[styles.label, { marginTop: 12 }]}>{isSitter ? "Ocena właściciela" : "Twoja ocena"}</Text><ReviewDetails review={booking.review} /></> : null}
             {changingId === booking.id ? <ActivityIndicator style={{ marginTop: 12 }} color="#D35400" /> : (
               <View style={styles.wrap}>
 
-                <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/marketplace/chat')}>
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push({ pathname: "/marketplace/chat", params: { bookingId: booking.id } })}>
                   <Text style={styles.secondaryButtonText}>Czat</Text>
                 </TouchableOpacity>
+                {!isSitter && accountId === booking.ownerAccountId && booking.status === "COMPLETED" && booking.sitterService.type === "DOG_WALK" && !booking.review ?
+                  <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={() => router.push({ pathname: "/marketplace/review", params: { bookingId: booking.id } })}><Text style={styles.secondaryButtonText}>Oceń spacerowicza</Text></TouchableOpacity> : null}
 
                 {isSitter && booking.status === "REQUESTED" ? <>
                   <TouchableOpacity style={styles.secondaryButton} onPress={() => changeStatus(booking, "ACCEPTED")}><Text style={styles.secondaryButtonText}>Akceptuj</Text></TouchableOpacity>
@@ -100,6 +107,7 @@ export default function BookingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  label: { color: "#6F5648", fontSize: 14, fontWeight: "700" },
   container: { flex: 1, backgroundColor: "#FFF8F0" },
   content: { padding: 20, paddingBottom: 48 },
   header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 20 },

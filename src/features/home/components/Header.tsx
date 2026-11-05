@@ -1,12 +1,14 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import Octicons from '@expo/vector-icons/Octicons';
 import { Text } from "expo-router/react-navigation";
-import { TouchableOpacity, View, Modal, Pressable, ScrollView, Animated, Platform, StyleSheet } from "react-native";
+import { TouchableOpacity, View, ScrollView, Platform, StyleSheet } from "react-native";
 
-import { router, useFocusEffect } from "expo-router";
-import { useState, useCallback, useEffect, useRef } from "react";
-import { listNotifications, getUnreadNotificationCount } from "@/features/notifications/services/notifications-service";
+import { router } from "expo-router";
+import { useState, useEffect } from "react";
+import { listNotifications, getUnreadNotificationCount, markNotificationRead } from "@/features/notifications/services/notifications-service";
 import type { AppNotification } from "@/features/notifications/types/notifications";
+import { getUnreadMessageCount } from "@/features/chat/services/chat-service";
+import { useFocusedPolling } from "@/shared/hooks/use-focused-polling";
+import { getSessionRevision, subscribeSessionChanged } from "@/shared/session/session-events";
 
 export function Header() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -14,29 +16,28 @@ export function Header() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
+  useEffect(() => subscribeSessionChanged(() => {
+    setNotifications([]); setUnreadCount(0); setUnreadMessages(0); setNotificationsOpen(false);
+  }), []);
+  useFocusedPolling(async isCurrent => {
+    const [notifications, messages] = await Promise.allSettled([getUnreadNotificationCount(), getUnreadMessageCount()]);
+    if (!isCurrent()) return;
+    if (notifications.status === "fulfilled") setUnreadCount(notifications.value.count);
+    if (messages.status === "fulfilled") setUnreadMessages(messages.value.count);
+  }, 5000);
 
-      const checkNotifications = async () => {
-        try{
-          const {count} = await getUnreadNotificationCount();
-          if(active){
-            setUnreadCount(count);
-          } 
-        } catch {
-            console.warn("Nie udało się odświeżyć licznika powiadomień.")
-          }
-      }
-
-      void checkNotifications();
-      return () => {
-        active = false;
-      }
-
-    }, [])
-  );
+  const openNotification = async (item: AppNotification) => {
+    const revision = getSessionRevision();
+    try {
+      if (!item.readAt) await markNotificationRead(item.id);
+      if (revision !== getSessionRevision()) return;
+      setNotificationsOpen(false);
+      if (item.conversationId) router.push({ pathname: "/marketplace/chat", params: { conversationId: item.conversationId } });
+      else router.push("/notifications");
+    } catch { if (revision === getSessionRevision()) setError("Nie udało się otworzyć powiadomienia."); }
+  };
 
   const toggleNotifications = async () => {
     if(notificationsOpen){
@@ -46,9 +47,11 @@ export function Header() {
     setNotificationsOpen(true);
     setLoading(true);
     setError("");
+    const revision = getSessionRevision();
     
     try {
       const response = await listNotifications({pageSize: 20});
+      if (revision !== getSessionRevision()) return;
       setNotifications(response.items);
     } catch{
       setError("Nie udało się pobrać powiadomień");
@@ -67,9 +70,13 @@ export function Header() {
         <Text style={styles.title}>Cześć!</Text>
         <Text style={styles.subtitle}>Zaplanuj opiekę bez stresu.</Text>
       </View>
+        <View style={styles.headerActions}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Moje rozmowy, ${unreadMessages} nieprzeczytanych wiadomości`} style={styles.headerIconButton} onPress={() => router.push("/marketplace/conversations")}>
+          <MaterialCommunityIcons name="message-outline" size={22} color="#7A3B12" />
+          {unreadMessages > 0 ? <Text style={styles.messageBadge}>{unreadMessages > 99 ? "99+" : unreadMessages}</Text> : null}
+        </TouchableOpacity>
         <View style={styles.notificationsAnchor}>
       <TouchableOpacity style={styles.headerIconButton} onPress={() => void toggleNotifications()}>
-        {/* <Octicons style={{alignSelf: "flex-end", top: 16, right: 9, zIndex:102}} name="dot-fill" size={16} color="red" />  */}
         <MaterialCommunityIcons name={unreadCount > 0 ? "bell-badge-outline": "bell-outline"} size={22} color={"#7A3B12"}></MaterialCommunityIcons>
       </TouchableOpacity>
 
@@ -96,7 +103,7 @@ export function Header() {
                 styles.notificationItem,
                 !notification.readAt && styles.unreadCard,
               ]}>
-                <TouchableOpacity onPress={() => router.navigate('/notifications')}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => void openNotification(notification)}>
 
                   <View style={styles.spaceBetween}>
                     <Text style={styles.notificationTitle}>{notification.title}</Text>
@@ -114,6 +121,7 @@ export function Header() {
           </ScrollView>
         </View>
       )}
+      </View>
       </View>
     </View>
   );
@@ -133,6 +141,8 @@ const smallShadow = Platform.select({
 });
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: "row", gap: 10, alignItems: "center" },
+  messageBadge: { position: "absolute", right: -5, top: -5, backgroundColor: "#D35400", color: "#FFFFFF", fontSize: 11, borderRadius: 12, minWidth: 20, textAlign: "center", padding: 3 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -172,7 +182,7 @@ const styles = StyleSheet.create({
   headerPosition: { position: "relative", zIndex:100, overflow:"visible" },
   notificationsAnchor: { position: "relative", zIndex: 101 },
   notificationPanel: { position: "absolute", zIndex:102, top: 52, right: 0, width: 340, backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#EDE5DF", boxShadow: "0px 6px 20px rgba(0, 0, 0, 0.15)" },
-  notificationPanelTitle: { color: "#00000", fontSize: 17, fontWeight: "700" },
+  notificationPanelTitle: { color: "#000000", fontSize: 17, fontWeight: "700" },
   notificationList: { maxHeight: 280, marginTop: 12 },
   notificationItem: { padding: 12, marginBottom: 8, borderWidth: 1, borderRadius: 12, borderColor: "transparent" },
   notificationTitle: { color:"#000000", fontWeight: "700", flex:1 },

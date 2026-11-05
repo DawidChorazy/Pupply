@@ -1,6 +1,9 @@
 export type TimeRange = { startsAt: string; endsAt: string };
 export type BookableTime = { slotId: string; startsAt: string; endsAt: string };
 export type CommonBookableTime = { time: string; bookings: BookableTime[] };
+export type ScheduleBreak = { start: number; end: number };
+export const MAX_DAILY_BREAKS = 5;
+export const TIME_STEP = 15;
 
 export const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -120,15 +123,41 @@ export function durationLabel(minutes: number): string {
   return hours ? `${hours} godz.${remainder ? ` ${remainder} min` : ""}` : `${minutes} min`;
 }
 
+export function suggestScheduleBreak(start: number, end: number, breaks: ScheduleBreak[]): ScheduleBreak | null {
+  if (breaks.length >= MAX_DAILY_BREAKS) return null;
+  const sorted = [...breaks].sort((a, b) => a.start - b.start);
+  const gaps = sorted.map((pause, index) => ({ start: index ? sorted[index - 1].end : start, end: pause.start }));
+  gaps.push({ start: sorted.at(-1)?.end ?? start, end });
+  const gap = gaps.filter(range => range.end - range.start >= TIME_STEP * 3)
+    .sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
+  if (!gap) return null;
+  if (!breaks.length && gap.start < 720 && gap.end > 780) return { start: 720, end: 780 };
+  const duration = Math.min(60, gap.end - gap.start - TIME_STEP * 2);
+  const from = Math.floor((gap.start + gap.end - duration) / (2 * TIME_STEP)) * TIME_STEP;
+  return { start: from, end: from + duration };
+}
+
 export function buildSchedule(
-  days: string[], start: number, end: number, pause?: { start: number; end: number }, now = new Date()
+  days: string[], start: number, end: number, breaks: ScheduleBreak[] = [], now = new Date()
 ): TimeRange[] {
-  if (start >= end) throw new Error("Koniec pracy musi być później niż początek.");
-  if (pause && (pause.start <= start || pause.end >= end || pause.start >= pause.end)) {
-    throw new Error("Przerwa musi mieścić się w godzinach pracy i mieć koniec późniejszy niż początek.");
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > 1440 || start >= end)
+    throw new Error("Koniec pracy musi być później niż początek. Wybierz godziny w obrębie jednego dnia.");
+  if (breaks.length > MAX_DAILY_BREAKS) throw new Error(`Możesz dodać maksymalnie ${MAX_DAILY_BREAKS} przerw dziennie.`);
+  const sorted = [...breaks].sort((a, b) => a.start - b.start);
+  for (const [index, pause] of sorted.entries()) {
+    if (!Number.isInteger(pause.start) || !Number.isInteger(pause.end) || pause.start <= start || pause.end >= end || pause.start >= pause.end)
+      throw new Error(`Przerwa ${index + 1} musi mieścić się w godzinach pracy i mieć koniec późniejszy niż początek.`);
+    if (index && pause.start < sorted[index - 1].end) throw new Error("Przerwy nie mogą nakładać się na siebie.");
   }
   if (!days.length) throw new Error("Wybierz co najmniej jeden dzień tygodnia.");
-  const ranges = pause ? [[start, pause.start], [pause.end, end]] : [[start, end]];
+  if (new Set(days).size > 28) throw new Error("Jednym zapisem możesz ustawić maksymalnie 28 dni.");
+  const ranges: number[][] = [];
+  let cursor = start;
+  for (const pause of sorted) {
+    if (pause.start > cursor) ranges.push([cursor, pause.start]);
+    cursor = pause.end;
+  }
+  ranges.push([cursor, end]);
   return days.flatMap(day => ranges.map(([from, to]) => {
     const startsAt = localDate(day, from), endsAt = localDate(day, to);
     if (startsAt.getHours() * 60 + startsAt.getMinutes() !== from || (to !== 1440 && endsAt.getHours() * 60 + endsAt.getMinutes() !== to)) {

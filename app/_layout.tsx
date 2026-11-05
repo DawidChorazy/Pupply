@@ -7,6 +7,7 @@ import { GamificationProvider } from "@/features/gamification/context/Gamificati
 import { PetsProvider } from "@/features/pets/context/PetsContext";
 import { WalksProvider } from "@/features/walks/context/WalksContext";
 import { useColorScheme } from "@/shared/hooks/use-color-scheme";
+import { PushNavigation } from "@/features/notifications/components/PushNavigation";
 
 export const unstable_settings = {
   initialRouteName: 'index',
@@ -17,6 +18,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <PushNavigation />
       <GamificationProvider>
         <PetsProvider>
           <WalksProvider>

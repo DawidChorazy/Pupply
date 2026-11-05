@@ -10,16 +10,13 @@ import { SitterSearchItem, SitterService, SitterServiceType } from "@/features/m
 
 import { CareLocationPicker } from "@/features/marketplace/components/CareLocationPicker";
 import { CareLocation } from "@/features/marketplace/services/location-service";
-
-const serviceLabels: Record<SitterServiceType, string> = {
-  DOG_WALK: "Spacer",
-  DROP_IN: "Wizyta domowa",
-  DAY_CARE: "Opieka dzienna"
-};
+import { RatingSummary } from "@/features/reviews/components/RatingSummary";
+import { SERVICE_LABELS as serviceLabels, SERVICE_DESCRIPTIONS } from "@/features/marketplace/services/service-catalog";
 
 export default function SittersScreen() {
   const [location, setLocation] = useState<CareLocation | null>(null);
   const [radius, setRadius] = useState("25");
+  const [minRating, setMinRating] = useState<number | undefined>();
   const [serviceType, setServiceType] = useState<SitterServiceType>("DOG_WALK");
   const [items, setItems] = useState<SitterSearchItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -59,7 +56,7 @@ export default function SittersScreen() {
     setItems([]);
     setError("");
     try {
-      const response = await searchSitters({ latitude: lat, longitude: lng, radiusKm, serviceType });
+      const response = await searchSitters({ latitude: lat, longitude: lng, radiusKm, serviceType, minRating });
       if (current !== searchRevision.current) return;
       setItems(response.items);
       setHasSearched(true);
@@ -68,7 +65,7 @@ export default function SittersScreen() {
     } finally {
       if (current === searchRevision.current) setIsLoading(false);
     }
-  }, [location, radius, serviceType]);
+  }, [location, radius, serviceType, minRating]);
 
   const openBooking = (sitter: SitterSearchItem, service: SitterService) => {
     const slot = sitter.availability.find((candidate) => {
@@ -109,6 +106,8 @@ export default function SittersScreen() {
               {(Object.keys(serviceLabels) as SitterServiceType[]).map((type) => (
                 <TouchableOpacity
                   key={type}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: serviceType === type }}
                   style={[styles.chip, serviceType === type && styles.chipActive]}
                   onPress={() => { setServiceType(type); resetResults(); }}
                 >
@@ -116,12 +115,14 @@ export default function SittersScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={[styles.muted, { marginTop: 10 }]}>{SERVICE_DESCRIPTIONS[serviceType]}</Text>
             <View style={styles.divider} />
             <CareLocationPicker value={location} onChange={changeLocation} />
             <Text style={styles.label}>Odległość od lokalizacji</Text>
             <View style={[styles.wrap, { marginBottom: 10 }]}>
               {[5, 10, 25, 50].map(km => <TouchableOpacity key={km} style={[styles.chip, Number(radius) === km && styles.chipActive]} onPress={() => { setRadius(String(km)); resetResults(); }} accessibilityRole="button" accessibilityState={{ selected: Number(radius) === km }}><Text style={[styles.chipText, Number(radius) === km && styles.chipTextActive]}>Do {km} km</Text></TouchableOpacity>)}
             </View>
+            <Text style={styles.label}>Minimalna ocena</Text><View style={[styles.wrap, { marginBottom: 12 }]}>{([undefined, 3, 4, 4.5] as const).map(value => <TouchableOpacity key={value ?? "all"} accessibilityRole="button" accessibilityState={{ selected: minRating === value }} style={[styles.chip, minRating === value && styles.chipActive]} onPress={() => { setMinRating(value); resetResults(); }}><Text style={[styles.chipText, minRating === value && styles.chipTextActive]}>{value === undefined ? "Dowolna ocena" : `Od ${String(value).replace(".", ",")} ★`}</Text></TouchableOpacity>)}</View>
             <TouchableOpacity style={[styles.primaryButton, isLoading && styles.buttonDisabled]} onPress={load} disabled={isLoading}>
               {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>Szukaj opiekunów</Text>}
             </TouchableOpacity>
@@ -151,6 +152,13 @@ export default function SittersScreen() {
               {service ? <Text style={styles.price}>{(service.priceCents / 100).toFixed(2)} zł</Text> : null}
             </View>
             <Text style={[styles.body, { marginTop: 10 }]}>{sitter.bio}</Text>
+            <RatingSummary summary={sitter.ratingSummary} />
+            {sitter.ratingSummary ? <Text style={styles.muted}>Zakończone spacery: {sitter.ratingSummary.completedWalkCount}</Text> : null}
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Opinie o ${sitter.displayName}`} onPress={() => router.push({ pathname: "/marketplace/reviews", params: { sitterId: sitter.id } })}><Text style={[styles.chipText, { marginVertical: 10 }]}>Zobacz opinie</Text></TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Napisz do ${sitter.displayName}`} style={styles.chip}
+              onPress={() => router.push({ pathname: "/marketplace/chat", params: { sitterProfileId: sitter.id } })}>
+              <Text style={styles.chipText}>Napisz do opiekuna</Text>
+            </TouchableOpacity>
             <View style={styles.divider} />
             {sitter.services.length > 1 ? <View style={[styles.wrap, { marginBottom: 12 }]}>{sitter.services.map(variant => <TouchableOpacity key={variant.id} style={[styles.chip, service?.id === variant.id && styles.chipActive]} onPress={() => setSelectedServiceIds(current => ({ ...current, [sitter.id]: variant.id }))} accessibilityRole="button" accessibilityState={{ selected: service?.id === variant.id }}><Text style={[styles.chipText, service?.id === variant.id && styles.chipTextActive]}>{variant.durationMinutes} min · {(variant.priceCents / 100).toFixed(2)} zł</Text></TouchableOpacity>)}</View> : null}
             {service ? <Text style={styles.muted}>{serviceLabels[service.type]} • {service.durationMinutes} min</Text> : null}

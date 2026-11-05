@@ -3,6 +3,7 @@ import { documentRouter } from "./document.routes";
 import { accountRouter, adminRouter } from "./account.routes";
 import { petShareRouter, sharedPetRouter } from "./pet-share.routes";
 import { Router } from "express";
+import { chatRouter } from "./chat.routes";
 
 import { authRouter } from "./auth.routes";
 import { bookingRouter } from "./booking.routes";
@@ -15,6 +16,7 @@ import { uploadRouter } from "./upload.routes";
 import { locationRouter } from "./location.routes";
 
 const apiRouter = Router();
+apiRouter.use("/conversations", chatRouter);
 apiRouter.use("/account", accountRouter);
 apiRouter.use("/admin", adminRouter);
 apiRouter.use("/gamification", gamificationRouter);

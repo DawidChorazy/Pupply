@@ -5,6 +5,7 @@ import { AppError } from "../utils/app-error";
 import { createOpaqueToken, hashToken } from "../utils/tokens";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { assertMailAvailable, sendMail } from "./mail.service";
+import { resetClinicVerification } from "./clinic-verification.service";
 
 export async function changePassword(accountId: string, currentPassword: string, password: string) {
   const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
@@ -42,6 +43,9 @@ export async function confirmEmailChange(token: string) {
     const claimed = await tx.accountActionToken.updateMany({ where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
     if (!claimed.count) throw new AppError(400, "Link został już użyty", "INVALID_ACTION_TOKEN");
     await tx.account.update({ where: { id: record.accountId }, data: { email: record.pendingEmail, emailVerifiedAt: new Date(), authVersion: { increment: 1 }, googleId: null } });
+    const clinics = await tx.clinicProfile.updateMany({ where: { accountId: record.accountId }, data: resetClinicVerification });
+    if (clinics.count) await tx.auditLog.create({ data: { actorAccountId: record.accountId, targetAccountId: record.accountId,
+      action: "CLINIC_VERIFICATION_INVALIDATED", reason: "Zmiana adresu e-mail wymaga ponownego potwierdzenia reprezentanta kliniki." } });
     await tx.refreshToken.updateMany({ where: { accountId: record.accountId, revokedAt: null }, data: { revokedAt: new Date() } });
     await tx.accountActionToken.updateMany({ where: { accountId: record.accountId, usedAt: null }, data: { usedAt: new Date() } });
     await tx.auditLog.create({ data: { actorAccountId: record.accountId, targetAccountId: record.accountId, action: "EMAIL_CHANGED" } });

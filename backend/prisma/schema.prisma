@@ -13,6 +13,13 @@ enum AccountRole {
   ADMIN
 }
 
+enum ClinicVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 enum PetGender {
   MALE
   FEMALE
@@ -34,6 +41,7 @@ enum BookingStatus {
 }
 
 enum NotificationType {
+  NEW_MESSAGE
   BOOKING_REQUESTED
   BOOKING_ACCEPTED
   BOOKING_REJECTED
@@ -74,6 +82,11 @@ model Account {
   notifications   Notification[]
   pushDevices     PushDevice[]
   bookingOperations BookingOperation[]
+  firstConversations Conversation[] @relation("FirstParticipant")
+  secondConversations Conversation[] @relation("SecondParticipant")
+  chatMessages ChatMessage[]
+  writtenReviews SitterReview[] @relation("ReviewAuthor")
+  receivedReviews SitterReview[] @relation("ReviewedSitter")
 }
 
 model UserProfile {
@@ -82,6 +95,7 @@ model UserProfile {
   fullName  String
   phone     String
   birthDate DateTime?
+  photoKey  String?
   account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
@@ -91,7 +105,18 @@ model ClinicProfile {
   clinicName String
   nip        String  @unique
   phone      String
+  address    String?
+  registrationNumber String?
+  verificationStatus ClinicVerificationStatus @default(UNVERIFIED)
+  verificationVersion Int @default(0)
+  verificationSubmittedAt DateTime?
+  verificationReviewedAt DateTime?
+  verificationReviewedBy String?
+  verificationReason String?
+  verificationEvidenceUrl String?
   account    Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([verificationStatus, verificationSubmittedAt])
 }
 
 model RefreshToken {
@@ -232,11 +257,30 @@ model Booking {
   sitterService      SitterService    @relation(fields: [sitterServiceId], references: [id], onDelete: Restrict)
   availabilitySlot   AvailabilitySlot @relation(fields: [availabilitySlotId], references: [id], onDelete: Restrict)
   notifications      Notification[]
+  review             SitterReview?
 
   @@index([ownerAccountId, createdAt])
   @@index([sitterAccountId, createdAt])
   @@index([availabilitySlotId])
   @@index([status, expiresAt])
+}
+
+model SitterReview {
+  id String @id @default(cuid())
+  bookingId String @unique
+  authorAccountId String
+  sitterAccountId String
+  punctuality Int
+  communication Int
+  quality Int
+  comment String?
+  createdAt DateTime @default(now())
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author Account @relation("ReviewAuthor", fields: [authorAccountId], references: [id], onDelete: Cascade)
+  sitter Account @relation("ReviewedSitter", fields: [sitterAccountId], references: [id], onDelete: Cascade)
+
+  @@index([sitterAccountId, createdAt, id])
+  @@index([authorAccountId])
 }
 
 model PetDocument {
@@ -274,6 +318,8 @@ model Notification {
   id        String           @id @default(cuid())
   accountId String
   bookingId String?
+  conversationId String?
+  chatMessageId String? @unique
   type      NotificationType
   title     String
   message   String
@@ -283,9 +329,47 @@ model Notification {
   deliveries NotificationDelivery[]
   account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   booking   Booking?         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  chatMessage ChatMessage? @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
 
   @@index([accountId, createdAt])
   @@index([accountId, readAt])
+  @@index([conversationId, accountId])
+}
+
+model Conversation {
+  id String @id @default(cuid())
+  firstAccountId String
+  secondAccountId String
+  firstReadSequence Int @default(0)
+  secondReadSequence Int @default(0)
+  lastSequence Int @default(0)
+  createdAt DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+  first Account @relation("FirstParticipant", fields: [firstAccountId], references: [id], onDelete: Cascade)
+  second Account @relation("SecondParticipant", fields: [secondAccountId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+  notifications Notification[]
+
+  @@unique([firstAccountId, secondAccountId])
+  @@index([firstAccountId, lastActivityAt, id])
+  @@index([secondAccountId, lastActivityAt, id])
+}
+
+model ChatMessage {
+  id String @id @default(cuid())
+  conversationId String
+  senderAccountId String
+  clientMessageId String
+  sequence Int
+  text String
+  createdAt DateTime @default(now())
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender Account @relation(fields: [senderAccountId], references: [id], onDelete: Cascade)
+  notification Notification?
+
+  @@unique([conversationId, sequence])
+  @@unique([conversationId, senderAccountId, clientMessageId])
 }
 
 model PushDevice {

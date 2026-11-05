@@ -6,6 +6,7 @@ import { assertPhotoExists, getPetPhotoUrl } from "./storage.service";
 import { requireVerifiedEmail } from "./account-access.service";
 import { activeBookingWhere } from "./booking-expiry.service";
 import { calendarQuerySchema } from "../validation/sitter.schemas";
+import { emptyReviewSummary, reviewSummaries } from "./review.service";
 
 type ServiceInput = {
   type: SitterServiceType;
@@ -197,6 +198,39 @@ export async function deleteAvailability(accountId: string, role: AccountRole, s
   });
 }
 
+// Archive/undo uses the original IDs, preserving reservations and calendar history.
+// The same profile/slot locks as calendar writes and booking creation protect the batch.
+export async function changeAvailabilityArchive(accountId: string, role: AccountRole, slotIds: string[], restore = false) {
+  requireUser(role);
+  if (restore) await requireVerifiedEmail(accountId);
+  return prisma.$transaction(async tx => {
+    const profiles = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "SitterProfile" WHERE "accountId" = ${accountId} FOR UPDATE`;
+    if (!profiles.length) throw new AppError(404, "Nie znaleziono profilu opiekuna.", "SITTER_NOT_FOUND");
+    const profileId = profiles[0].id;
+    await tx.$queryRaw`SELECT id FROM "AvailabilitySlot" WHERE "sitterProfileId" = ${profileId} AND id IN (${Prisma.join(slotIds)}) ORDER BY id FOR UPDATE`;
+    const slots = await tx.availabilitySlot.findMany({ where: { id: { in: slotIds }, sitterProfileId: profileId }, orderBy: [{ startsAt: "asc" }, { id: "asc" }] });
+    if (slots.length !== slotIds.length) throw new AppError(404, "Nie znaleziono wybranych przedziałów.", "AVAILABILITY_NOT_FOUND");
+    const now = new Date();
+    if (!restore) {
+      const booked = await tx.booking.findFirst({ where: { availabilitySlotId: { in: slotIds }, ...activeBookingWhere(now), endsAt: { gt: now } } });
+      if (booked) throw new AppError(409, "Grafik się zmienił. Wybrane godziny mają aktywną rezerwację. Odśwież kalendarz i spróbuj ponownie.", "SLOT_HAS_BOOKINGS");
+      await tx.availabilitySlot.updateMany({ where: { id: { in: slotIds }, archivedAt: null }, data: { archivedAt: now } });
+      return [];
+    }
+    if (slots.some((slot, index) => index > 0 && slot.startsAt < slots[index - 1].endsAt))
+      throw new AppError(409, "Przywracane godziny nakładają się na siebie.", "AVAILABILITY_OVERLAP");
+    const archived = slots.filter(slot => slot.archivedAt);
+    if (archived.length) {
+      const overlap = await tx.availabilitySlot.findFirst({ where: { sitterProfileId: profileId, archivedAt: null, id: { notIn: slotIds },
+        OR: archived.map(slot => ({ startsAt: { lt: slot.endsAt }, endsAt: { gt: slot.startsAt } })) } });
+      if (overlap) throw new AppError(409, "Nie można cofnąć usunięcia: te godziny są już zajęte przez inny przedział grafiku.", "AVAILABILITY_OVERLAP");
+      await tx.availabilitySlot.updateMany({ where: { id: { in: archived.map(slot => slot.id) } }, data: { archivedAt: null } });
+    }
+    return tx.availabilitySlot.findMany({ where: { id: { in: slotIds } }, orderBy: [{ startsAt: "asc" }, { id: "asc" }],
+      include: { bookings: scheduleBookings(new Date(0), new Date("9999-01-01T00:00:00Z"), now) } });
+  });
+}
+
 function freeAvailability<T extends { startsAt: Date; endsAt: Date }>(slot: T, bookings: { startsAt: Date; endsAt: Date }[], now: Date): T[] {
   let cursor = new Date(Math.max(slot.startsAt.getTime(), now.getTime()));
   const gaps: T[] = [];
@@ -247,7 +281,7 @@ export async function getSitterAvailability(profileId: string, sitterServiceId: 
 
 export async function searchSitters(input: {
   latitude: number; longitude: number; radiusKm: number; serviceType?: SitterServiceType;
-  from?: Date; to?: Date; page: number; pageSize: number;
+  from?: Date; to?: Date; page: number; pageSize: number; minRating?: number;
 }) {
   const now = new Date();
   const serviceFilter = input.serviceType ? Prisma.sql`AND v.type = ${input.serviceType}::"SitterServiceType"` : Prisma.empty;
@@ -269,6 +303,8 @@ export async function searchSitters(input: {
         cos(radians(p.longitude - ${input.longitude}::double precision))))) AS distance
       FROM "SitterProfile" p JOIN "Account" ac ON ac.id = p."accountId"
       WHERE p."isActive" = true AND ac."emailVerifiedAt" IS NOT NULL AND ac."blockedAt" IS NULL AND ac."deactivatedAt" IS NULL
+      ${input.minRating !== undefined ? Prisma.sql`AND (SELECT ROUND(AVG((r.punctuality + r.communication + r.quality)::numeric / 3), 2)
+        FROM "SitterReview" r WHERE r."sitterAccountId" = p."accountId") >= ${input.minRating}` : Prisma.empty}
       AND EXISTS (SELECT 1 FROM "SitterService" v JOIN free f ON f."sitterProfileId" = v."sitterProfileId"
         WHERE v."sitterProfileId" = p.id AND v."isActive" = true ${serviceFilter}
         AND f."endsAt" - GREATEST(f."startsAt", ${now}) >= v."durationMinutes" * interval '1 minute'
@@ -288,6 +324,7 @@ export async function searchSitters(input: {
         include: { bookings: { where: activeBookingWhere(now), orderBy: { startsAt: "asc" } } } }
     }
   });
+  const summaries = await reviewSummaries(profiles.map(profile => profile.accountId));
   const items = await Promise.all(rows.map(async row => {
     const profile = profiles.find(p => p.id === row.id);
     if (!profile) return null;
@@ -299,6 +336,7 @@ export async function searchSitters(input: {
       id: profile.id, displayName: profile.account.userProfile?.fullName ?? "Opiekun Pupply",
       bio: profile.bio, city: profile.city, region: profile.region,
       photoUrl: await getPetPhotoUrl(profile.photoKey), serviceRadiusKm: profile.serviceRadiusKm,
+      ratingSummary: summaries.get(profile.accountId) ?? emptyReviewSummary(),
       services: profile.services, availability, distanceKm: Math.round(row.distance * 10) / 10
     };
   }));

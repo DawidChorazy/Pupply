@@ -1,5 +1,8 @@
 import { reliabilityPaths, reliabilitySchemas } from "./reliability-openapi";
 import { petSharingPaths, petSharingSchemas } from "./pet-sharing-openapi";
+import { clinicVerificationPaths, clinicVerificationSchemas } from "./clinic-verification-openapi";
+import { chatPaths, chatSchemas } from "./chat-openapi";
+import { reviewPaths, reviewSchemas } from "./reviews-openapi";
 
 const jsonBody = (schema: object) => ({
   required: true,
@@ -43,6 +46,8 @@ export const openApiSpec = {
   },
   servers: [{ url: "http://localhost:4000", description: "Local development" }],
   tags: [
+    { name: "Reviews" },
+    { name: "Chat" },
     { name: "Pet sharing" },
     { name: "Documents" },
     { name: "Account" },
@@ -59,6 +64,9 @@ export const openApiSpec = {
     { name: "Gamification" }
   ],
   paths: {
+    ...reviewPaths,
+    ...chatPaths,
+    ...clinicVerificationPaths,
     ...petSharingPaths,
     ...reliabilityPaths,
     "/api/gamification/quests": {
@@ -144,19 +152,19 @@ export const openApiSpec = {
       }
     },
     "/api/users/me": {
-      get: { tags: ["Users"], summary: "Get user profile", security: bearer, responses: { "200": jsonResponse("Profile", { $ref: "#/components/schemas/ProfileEnvelope" }), ...standardErrors } },
+      get: { tags: ["Users"], summary: "Get user profile including photoKey and resolved photoUrl (both nullable)", security: bearer, responses: { "200": jsonResponse("Profile", { $ref: "#/components/schemas/ProfileEnvelope" }), ...standardErrors } },
       patch: {
         tags: ["Users"], summary: "Update user profile", security: bearer,
-        requestBody: jsonBody({ type: "object", properties: { fullName: { type: "string" }, phone: { type: "string" }, birthDate: { type: "string", format: "date", nullable: true } } }),
+        requestBody: jsonBody({ type: "object", properties: { fullName: { type: "string" }, phone: { type: "string" }, birthDate: { type: "string", format: "date", nullable: true }, photoKey: { type: "string", nullable: true, minLength: 1, maxLength: 500, description: "Owned, uploaded users/ photo key from /uploads/profile-photo. Null removes the avatar; omitting it preserves the photo." } } }),
         responses: { "200": jsonResponse("Profile", { $ref: "#/components/schemas/ProfileEnvelope" }), ...standardErrors }
       }
     },
     "/api/clinics/me": {
-      get: { tags: ["Clinics"], summary: "Get clinic profile", security: bearer, responses: { "200": jsonResponse("Profile", { $ref: "#/components/schemas/ProfileEnvelope" }), ...standardErrors } },
+      get: { tags: ["Clinics"], summary: "Get clinic profile and verification status", security: bearer, responses: { "200": jsonResponse("Profile", { $ref: "#/components/schemas/ClinicProfileEnvelope" }), ...standardErrors } },
       patch: {
-        tags: ["Clinics"], summary: "Update clinic profile", security: bearer,
-        requestBody: jsonBody({ type: "object", properties: { clinicName: { type: "string" }, phone: { type: "string" } } }),
-        responses: { "200": jsonResponse("Profile", { $ref: "#/components/schemas/ProfileEnvelope" }), ...standardErrors }
+        tags: ["Clinics"], summary: "Update clinic profile; changes require resubmission for verification", security: bearer,
+        requestBody: jsonBody({ $ref: "#/components/schemas/ClinicProfileUpdate" }),
+        responses: { "200": jsonResponse("Profile", { $ref: "#/components/schemas/ClinicProfileEnvelope" }), ...standardErrors }
       }
     },
     "/api/pets": {
@@ -171,6 +179,11 @@ export const openApiSpec = {
       get: { tags: ["Pets"], summary: "Get own pet", security: bearer, responses: { "200": jsonResponse("Pet", { $ref: "#/components/schemas/PetEnvelope" }), ...standardErrors } },
       patch: { tags: ["Pets"], summary: "Update own pet", security: bearer, requestBody: jsonBody({ $ref: "#/components/schemas/PetUpdateInput" }), responses: { "200": jsonResponse("Pet", { $ref: "#/components/schemas/PetEnvelope" }), ...standardErrors } },
       delete: { tags: ["Pets"], summary: "Delete own pet", security: bearer, responses: { "204": jsonResponse("Deleted"), ...standardErrors } }
+    },
+    "/api/uploads/profile-photo": {
+      post: { tags: ["Uploads"], summary: "Prepare a user profile photo upload (no sitter profile required)", security: bearer,
+        requestBody: jsonBody({ type: "object", required: ["contentType", "sizeBytes"], properties: { contentType: { type: "string", enum: ["image/jpeg", "image/png", "image/webp"] }, sizeBytes: { type: "integer", minimum: 1 } } }),
+        responses: { "201": jsonResponse("Upload to uploadUrl, then PATCH /api/users/me with photoKey", { $ref: "#/components/schemas/UploadResponse" }), ...standardErrors } }
     },
     "/api/uploads/pet-photo": {
       post: {
@@ -194,6 +207,7 @@ export const openApiSpec = {
           { name: "longitude", in: "query", required: true, schema: { type: "number" } },
           { name: "radiusKm", in: "query", schema: { type: "number", default: 25 } },
           { name: "serviceType", in: "query", schema: { $ref: "#/components/schemas/ServiceType" } },
+          { name: "minRating", in: "query", schema: { type: "number", minimum: 1, maximum: 5 }, description: "Minimum average rating, rounded to two decimals. Unrated sitters are excluded only when this filter is set. Applied before pagination; results remain ordered by distance." },
           { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
           { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
           { name: "page", in: "query", schema: { type: "integer", default: 1 } },
@@ -222,7 +236,17 @@ export const openApiSpec = {
       get: { tags: ["Sitters"], summary: "Read an owned calendar date window without running maintenance; returns active availability with active reservation details", security: bearer, parameters: calendarParameters, responses: { "200": jsonResponse("Schedule page", { type: "object", properties: { ...calendarPage, slots: { type: "array", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } }), ...standardErrors } }
     },
     "/api/sitters/me/availability/batch": {
-      post: { tags: ["Sitters"], security: bearer, summary: "Atomically add up to 56 future working intervals; any overlap rolls back the whole batch", requestBody: jsonBody({ type: "object", required: ["slots"], properties: { slots: { type: "array", minItems: 1, maxItems: 56, items: { $ref: "#/components/schemas/AvailabilityInput" } } } }), responses: { "201": jsonResponse("Created", { type: "object", properties: { slots: { type: "array", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } }), ...standardErrors } }
+      post: { tags: ["Sitters"], security: bearer, summary: "Atomically add up to 168 future working intervals (28 days with five breaks); any overlap rolls back the whole batch", requestBody: jsonBody({ type: "object", required: ["slots"], properties: { slots: { type: "array", minItems: 1, maxItems: 168, items: { $ref: "#/components/schemas/AvailabilityInput" } } } }), responses: { "201": jsonResponse("Created", { type: "object", properties: { slots: { type: "array", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } }), ...standardErrors } }
+    },
+    "/api/sitters/me/availability/archive": {
+      post: { tags: ["Sitters"], security: bearer, summary: "Atomically archive selected availability intervals; safe to retry",
+        description: "The authenticated sitter must own every ID. Active future reservations reject the entire batch with SLOT_HAS_BOOKINGS (409). Slot locks serialize with booking creation. Historical reservations remain intact. Already archived intervals are accepted. Return IDs can be sent to /restore to undo.",
+        requestBody: jsonBody({ $ref: "#/components/schemas/AvailabilitySelection" }), responses: { "200": jsonResponse("Archived", { $ref: "#/components/schemas/AvailabilitySelection" }), ...standardErrors } }
+    },
+    "/api/sitters/me/availability/restore": {
+      post: { tags: ["Sitters"], security: bearer, summary: "Undo availability removal using original interval IDs; safe to retry",
+        description: "Requires an active verified sitter owning every ID. Restores original hours and historical links. If any restored interval overlaps current availability, the whole batch returns AVAILABILITY_OVERLAP (409). Already active IDs are accepted without duplication.",
+        requestBody: jsonBody({ $ref: "#/components/schemas/AvailabilitySelection" }), responses: { "200": jsonResponse("Restored", { type: "object", properties: { slots: { type: "array", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } }), ...standardErrors } }
     },
     "/api/sitters/{profileId}/availability": {
       get: { tags: ["Sitters"], summary: "Read a bounded public calendar page without writes; excludes archived slots, active bookings and elapsed time; expired requests are treated as free without modifying their rows", parameters: [idParameter("profileId"), { name: "sitterServiceId", in: "query", required: true, schema: { type: "string" } }, ...calendarParameters], responses: { "200": jsonResponse("Bookable schedule", { type: "object", properties: { ...calendarPage, service: { $ref: "#/components/schemas/SitterService" }, availability: { type: "array", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } }), ...standardErrors } }
@@ -291,6 +315,9 @@ export const openApiSpec = {
     },
     schemas: {
       ...reliabilitySchemas,
+      ...clinicVerificationSchemas,
+      ...chatSchemas,
+      ...reviewSchemas,
       ...petSharingSchemas,
       QuestState: { type: "object", required: ["quests", "userPoints"], properties: {
         userPoints: { type: "integer", minimum: 0 },
@@ -303,7 +330,7 @@ export const openApiSpec = {
       Error: { type: "object", required: ["error", "message"], properties: { error: { type: "string" }, message: { type: "string" }, requestId: { type: "string" }, details: { type: "object", additionalProperties: true } } },
       Status: { type: "object", required: ["status"], properties: { status: { type: "string" } } },
       RegisterUserRequest: { type: "object", required: ["fullName", "email", "phone", "password", "confirmPassword"], properties: { fullName: { type: "string" }, email: { type: "string", format: "email" }, phone: { type: "string" }, birthDate: { type: "string", format: "date" }, password: { type: "string", format: "password" }, confirmPassword: { type: "string", format: "password" } } },
-      RegisterClinicRequest: { type: "object", required: ["clinicName", "nip", "email", "phone", "password", "confirmPassword"], properties: { clinicName: { type: "string" }, nip: { type: "string" }, email: { type: "string", format: "email" }, phone: { type: "string" }, password: { type: "string", format: "password" }, confirmPassword: { type: "string", format: "password" } } },
+      RegisterClinicRequest: { type: "object", required: ["clinicName", "nip", "email", "phone", "password", "confirmPassword"], properties: { clinicName: { type: "string" }, nip: { $ref: "#/components/schemas/PolishNip" }, email: { type: "string", format: "email" }, phone: { type: "string" }, password: { type: "string", format: "password" }, confirmPassword: { type: "string", format: "password" } } },
       LoginRequest: { type: "object", required: ["email", "password"], properties: { email: { type: "string", format: "email" }, password: { type: "string", format: "password" } } },
       RefreshTokenRequest: { type: "object", required: ["refreshToken"], properties: { refreshToken: { type: "string" } } },
       ActionTokenPasswordRequest: { type: "object", required: ["token", "password", "confirmPassword"], properties: { token: { type: "string" }, password: { type: "string", format: "password" }, confirmPassword: { type: "string", format: "password" } } },
@@ -314,21 +341,22 @@ export const openApiSpec = {
       Pet: { allOf: [{ $ref: "#/components/schemas/PetInput" }, { type: "object", required: ["id", "accountId", "createdAt", "updatedAt"], properties: { id: { type: "string" }, accountId: { type: "string" }, photoUrl: { type: "string", format: "uri", nullable: true }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } }] },
       PetEnvelope: { type: "object", required: ["pet"], properties: { pet: { $ref: "#/components/schemas/Pet" } } },
       UploadResponse: { type: "object", required: ["uploadUrl", "photoKey", "expiresIn"], properties: { uploadUrl: { type: "string", format: "uri" }, photoKey: { type: "string" }, expiresIn: { type: "integer" } } },
-      ServiceType: { type: "string", enum: ["DOG_WALK", "DROP_IN", "DAY_CARE"] },
+      ServiceType: { type: "string", enum: ["DOG_WALK", "DROP_IN", "DAY_CARE"], description: "DOG_WALK: a walk; DROP_IN: care at the pet owner's home; DAY_CARE: care at the sitter's home, with the owner bringing and collecting the pet. These care types differ by location, not duration; duration can be extended within availability." },
       SitterServiceInput: { type: "object", required: ["type", "durationMinutes", "priceCents"], properties: { type: { $ref: "#/components/schemas/ServiceType" }, durationMinutes: { type: "integer", minimum: 15 }, priceCents: { type: "integer", minimum: 0 }, isActive: { type: "boolean" } } },
       SitterProfileInput: { type: "object", properties: { bio: { type: "string" }, city: { type: "string" }, region: { type: "string", nullable: true }, photoKey: { type: "string", nullable: true, description: "Owned, uploaded sitter photo key. Null removes the photo." }, latitude: { type: "number" }, longitude: { type: "number" }, serviceRadiusKm: { type: "integer" }, isActive: { type: "boolean" }, services: { type: "array", minItems: 1, maxItems: 20, description: "Each type/duration pair must be unique; omitted previous variants become inactive.", items: { $ref: "#/components/schemas/SitterServiceInput" } } } },
       SitterService: { allOf: [{ $ref: "#/components/schemas/SitterServiceInput" }, { type: "object", required: ["id", "currency"], properties: { id: { type: "string" }, sitterProfileId: { type: "string" }, currency: { type: "string", enum: ["PLN"] } } }] },
       AvailabilityInput: { type: "object", required: ["startsAt", "endsAt"], properties: { startsAt: { type: "string", format: "date-time", description: "Future start" }, endsAt: { type: "string", format: "date-time", description: "Must be after start" } } },
+      AvailabilitySelection: { type: "object", additionalProperties: false, required: ["slotIds"], properties: { slotIds: { type: "array", minItems: 1, maxItems: 168, uniqueItems: true, items: { type: "string", minLength: 1, maxLength: 100 } } } },
       AvailabilitySlot: { type: "object", required: ["id", "startsAt", "endsAt"], properties: { id: { type: "string" }, sitterProfileId: { type: "string" }, startsAt: { type: "string", format: "date-time" }, endsAt: { type: "string", format: "date-time" }, bookings: { type: "array", description: "Only in the authenticated owner's profile; includes reservation times, status, pet name and service type for the calendar.", items: { type: "object", additionalProperties: true } } } },
-      SitterSearchItem: { type: "object", required: ["id", "displayName", "bio", "city", "distanceKm", "services", "availability"], properties: { id: { type: "string" }, displayName: { type: "string" }, bio: { type: "string" }, city: { type: "string" }, region: { type: "string", nullable: true }, photoUrl: { type: "string", format: "uri", nullable: true }, serviceRadiusKm: { type: "integer" }, distanceKm: { type: "number" }, services: { type: "array", items: { $ref: "#/components/schemas/SitterService" } }, availability: { type: "array", description: "Free future intervals after subtracting active bookings. Multiple intervals may have the same slot ID; pass startsAt when booking. Exact sitter coordinates are intentionally omitted.", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } },
+      SitterSearchItem: { type: "object", required: ["id", "displayName", "bio", "city", "distanceKm", "services", "availability", "ratingSummary"], properties: { id: { type: "string" }, displayName: { type: "string" }, bio: { type: "string" }, city: { type: "string" }, region: { type: "string", nullable: true }, photoUrl: { type: "string", format: "uri", nullable: true }, serviceRadiusKm: { type: "integer" }, distanceKm: { type: "number" }, ratingSummary: { $ref: "#/components/schemas/ReviewSummary" }, services: { type: "array", items: { $ref: "#/components/schemas/SitterService" } }, availability: { type: "array", description: "Free future intervals after subtracting active bookings. Multiple intervals may have the same slot ID; pass startsAt when booking. Exact sitter coordinates are intentionally omitted.", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } },
       PaginatedSitters: { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/SitterSearchItem" } }, pagination: { $ref: "#/components/schemas/Pagination" } } },
       BookingStatus: { type: "string", enum: ["REQUESTED", "ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED", "EXPIRED"] },
       BookingRequest: { type: "object", required: ["petId", "sitterServiceId", "availabilitySlotId"], properties: { petId: { type: "string" }, sitterServiceId: { type: "string" }, availabilitySlotId: { type: "string" }, startsAt: { type: "string", format: "date-time" }, durationMinutes: { type: "integer", minimum: 15, maximum: 1440, description: "Defaults to the service duration, which is also the minimum. Price is rounded to cents from service price × requested duration / service duration." }, expectedPriceCents: { type: "integer", minimum: 0, maximum: 2147483647, description: "Optional quote per appointment; a mismatch returns PRICE_CHANGED without creating a booking." }, note: { type: "string" } } },
       BatchBookingRequest: { type: "object", required: ["petId", "sitterServiceId", "slots"], properties: { petId: { type: "string" }, sitterServiceId: { type: "string" }, durationMinutes: { type: "integer", minimum: 15, maximum: 1440 }, expectedPriceCents: { type: "integer", minimum: 0, maximum: 2147483647, description: "Expected price of one appointment, not the total." }, note: { type: "string", maxLength: 1000 }, slots: { type: "array", minItems: 1, maxItems: 28, items: { type: "object", required: ["availabilitySlotId", "startsAt"], properties: { availabilitySlotId: { type: "string" }, startsAt: { type: "string", format: "date-time" } } } } } },
-      Booking: { type: "object", required: ["id", "status", "priceCents", "currency"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/BookingStatus" }, startsAt: { type: "string", format: "date-time" }, endsAt: { type: "string", format: "date-time" }, expiresAt: { type: "string", format: "date-time" }, priceCents: { type: "integer" }, currency: { type: "string", enum: ["PLN"] }, note: { type: "string", nullable: true }, pet: { type: "object", additionalProperties: true }, sitterService: { type: "object", additionalProperties: true }, availabilitySlot: { type: "object", additionalProperties: true } } },
+      Booking: { type: "object", required: ["id", "status", "priceCents", "currency"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/BookingStatus" }, startsAt: { type: "string", format: "date-time" }, endsAt: { type: "string", format: "date-time" }, expiresAt: { type: "string", format: "date-time" }, priceCents: { type: "integer" }, currency: { type: "string", enum: ["PLN"] }, note: { type: "string", nullable: true }, review: { allOf: [{ $ref: "#/components/schemas/SitterReview" }], nullable: true }, pet: { type: "object", additionalProperties: true }, sitterService: { type: "object", additionalProperties: true }, availabilitySlot: { type: "object", additionalProperties: true } } },
       BookingEnvelope: { type: "object", required: ["booking"], properties: { booking: { $ref: "#/components/schemas/Booking" } } },
       PaginatedBookings: { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/Booking" } }, pagination: { $ref: "#/components/schemas/Pagination" } } },
-      Notification: { type: "object", required: ["id", "type", "title", "message", "createdAt"], properties: { id: { type: "string" }, bookingId: { type: "string", nullable: true }, type: { type: "string" }, title: { type: "string" }, message: { type: "string" }, readAt: { type: "string", format: "date-time", nullable: true }, createdAt: { type: "string", format: "date-time" } } },
+      Notification: { type: "object", required: ["id", "type", "title", "message", "createdAt"], properties: { id: { type: "string" }, bookingId: { type: "string", nullable: true }, conversationId: { type: "string", nullable: true }, chatMessageId: { type: "string", nullable: true }, type: { type: "string" }, title: { type: "string" }, message: { type: "string" }, readAt: { type: "string", format: "date-time", nullable: true }, createdAt: { type: "string", format: "date-time" } } },
       PaginatedNotifications: { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/Notification" } }, pagination: { $ref: "#/components/schemas/Pagination" } } },
       Pagination: { type: "object", required: ["page", "pageSize", "total"], properties: { page: { type: "integer" }, pageSize: { type: "integer" }, total: { type: "integer" } } }
     }

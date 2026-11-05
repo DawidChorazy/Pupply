@@ -8,7 +8,7 @@ const exportsObject = {};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/features/scheduling/calendar-utils.ts", "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText, { exports: exportsObject, Date, Set, Map });
-const { dateKey, localDate, addDays, buildSchedule, scheduleDates, freeRanges, bookableTimes, commonBookableTimes, bookingPrice, intersectsDay } = exportsObject;
+const { dateKey, localDate, addDays, buildSchedule, scheduleDates, freeRanges, bookableTimes, commonBookableTimes, bookingPrice, intersectsDay, suggestScheduleBreak } = exportsObject;
 const now = new Date("2026-10-19T06:00:00Z");
 const range = (day, start, end) => ({ startsAt: localDate(day, start).toISOString(), endsAt: localDate(day, end).toISOString() });
 
@@ -22,7 +22,7 @@ test("calendar days stay local across month, year and DST boundaries", () => {
 test("repeat hours and breaks remain at 09:00 across the October clock change", () => {
   const days = scheduleDates("2026-10-23", [0, 4], 2);
   assert.deepEqual(Array.from(days), ["2026-10-23", "2026-10-26", "2026-10-30", "2026-11-02"]);
-  const slots = buildSchedule(days, 540, 1020, { start: 720, end: 780 }, now);
+  const slots = buildSchedule(days, 540, 1020, [{ start: 720, end: 780 }], now);
   assert.equal(slots.length, 8);
   assert.equal(slots[0].startsAt, "2026-10-23T07:00:00.000Z");
   assert.equal(slots[2].startsAt, "2026-10-26T08:00:00.000Z");
@@ -37,11 +37,50 @@ test("invalid hours, breaks, empty repeats, past starts and nonexistent DST hour
   for (const input of [
     () => buildSchedule([], 540, 1020, undefined, now),
     () => buildSchedule(["2026-10-20"], 1020, 540, undefined, now),
-    () => buildSchedule(["2026-10-20"], 540, 1020, { start: 480, end: 780 }, now),
-    () => buildSchedule(["2026-10-20"], 540, 1020, { start: 780, end: 720 }, now),
+    () => buildSchedule(["2026-10-20"], 540, 1020, [{ start: 480, end: 780 }], now),
+    () => buildSchedule(["2026-10-20"], 540, 1020, [{ start: 780, end: 720 }], now),
     () => buildSchedule(["2026-10-18"], 540, 1020, undefined, now),
     () => buildSchedule(["2027-03-28"], 150, 240, undefined, now)
   ]) assert.throws(input);
+});
+
+test("afternoon and short working hours get an in-range break, without overlapping existing breaks", () => {
+  const pauses = [];
+  for (let i = 0; i < 3; i++) {
+    const pause = suggestScheduleBreak(840, 1080, pauses);
+    assert.ok(pause);
+    assert.ok(pause.start > 840 && pause.end < 1080 && pause.start < pause.end);
+    assert.ok(pauses.every(other => pause.end < other.start || pause.start > other.end));
+    pauses.push(pause);
+  }
+  assert.equal(suggestScheduleBreak(840, 1080, pauses), null);
+  assert.equal(suggestScheduleBreak(840, 870, []), null);
+  const short = suggestScheduleBreak(840, 885, []);
+  assert.equal(short.start, 855); assert.equal(short.end, 870);
+});
+
+test("multiple breaks split every day chronologically and never allow care across a break", () => {
+  const pauses = [{ start: 840, end: 900 }, { start: 660, end: 690 }];
+  const slots = buildSchedule(["2026-10-23", "2026-10-26"], 540, 1020, pauses, now);
+  assert.equal(slots.length, 6);
+  assert.deepEqual(Array.from(slots.slice(0, 3), slot => [Date.parse(slot.startsAt), Date.parse(slot.endsAt)]),
+    [[540, 660], [690, 840], [900, 1020]].map(([from, to]) => [localDate("2026-10-23", from).getTime(), localDate("2026-10-23", to).getTime()]));
+  assert.equal(pauses[0].start, 840, "Do not mutate the draft's break order.");
+  const times = bookableTimes(slots.map((slot, index) => ({ ...slot, id: String(index) })), "2026-10-23", 60, now);
+  for (const time of times) for (const pause of pauses) {
+    assert.ok(Date.parse(time.endsAt) <= localDate("2026-10-23", pause.start).getTime() || Date.parse(time.startsAt) >= localDate("2026-10-23", pause.end).getTime());
+  }
+  assert.throws(() => buildSchedule(["2026-10-23"], 540, 1020, [{ start: 660, end: 750 }, { start: 720, end: 780 }], now), /nakładać/);
+  assert.throws(() => buildSchedule(["2026-10-23"], 540, 1020, [{ start: 660, end: 660 }], now));
+});
+
+test("four weeks with five breaks fit in a single atomic batch, including a midnight finish", () => {
+  const days = scheduleDates("2026-10-23", [0, 1, 2, 3, 4, 5, 6], 4);
+  const pauses = Array.from({ length: 5 }, (_, i) => ({ start: 600 + i * 90, end: 630 + i * 90 }));
+  const slots = buildSchedule(days, 540, 1440, pauses, now);
+  assert.equal(slots.length, 168);
+  assert.equal(slots.at(-1).endsAt, localDate(addDays(days.at(-1), 1)).toISOString());
+  assert.throws(() => buildSchedule(days, 540, 1440, [...pauses, { start: 1200, end: 1215 }], now), /maksymalnie 5/);
 });
 
 test("free hours exclude appointments and elapsed time without mutating the source", () => {

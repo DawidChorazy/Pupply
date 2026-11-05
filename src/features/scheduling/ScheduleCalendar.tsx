@@ -5,6 +5,7 @@ import { addDays, dateKey, dayLabel, localDate, WEEKDAYS } from "@/features/sche
 
 type Props = {
   value: string;
+  visibleMonth?: string;
   values?: string[];
   onChange: (day: string) => void;
   onMonthChange?: (month: string) => void;
@@ -16,8 +17,9 @@ type Props = {
   disabled?: boolean;
 };
 
-export function ScheduleCalendar({ value, values, onChange, onMonthChange, marks = {}, getMark, availableDays, isDayAvailable, minDate, disabled }: Props) {
-  const [month, setMonth] = useState(value.slice(0, 7));
+export function ScheduleCalendar({ value, visibleMonth, values, onChange, onMonthChange, marks = {}, getMark, availableDays, isDayAvailable, minDate, disabled }: Props) {
+  const [internalMonth, setMonth] = useState(value.slice(0, 7));
+  const month = visibleMonth ?? internalMonth;
   const first = localDate(`${month}-01`);
   const offset = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();

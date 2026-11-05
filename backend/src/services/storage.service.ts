@@ -49,7 +49,9 @@ const extensions: Record<string, string> = {
   "image/webp": "webp"
 };
 
-async function createPhotoUpload(accountId: string, contentType: string, sizeBytes: number, purpose: "pets" | "sitters") {
+type PhotoPurpose = "pets" | "sitters" | "users";
+
+async function createPhotoUpload(accountId: string, contentType: string, sizeBytes: number, purpose: PhotoPurpose) {
   const extension = extensions[contentType];
   if (!extension) throw new AppError(400, "Unsupported image type", "UNSUPPORTED_MEDIA_TYPE");
   if (sizeBytes > env.PET_PHOTO_MAX_BYTES) {
@@ -76,13 +78,17 @@ export function createSitterPhotoUpload(accountId: string, contentType: string, 
   return createPhotoUpload(accountId, contentType, sizeBytes, "sitters");
 }
 
-export function assertOwnedPhotoKey(accountId: string, photoKey: string, purpose: "pets" | "sitters" = "pets") {
+export function createProfilePhotoUpload(accountId: string, contentType: string, sizeBytes: number) {
+  return createPhotoUpload(accountId, contentType, sizeBytes, "users");
+}
+
+export function assertOwnedPhotoKey(accountId: string, photoKey: string, purpose: PhotoPurpose = "pets") {
   if (!photoKey.startsWith(`${purpose}/${accountId}/`) || photoKey.includes("..")) {
     throw new AppError(403, "Photo does not belong to this account", "FORBIDDEN");
   }
 }
 
-export async function assertPhotoExists(accountId: string, photoKey: string, purpose: "pets" | "sitters" = "pets") {
+export async function assertPhotoExists(accountId: string, photoKey: string, purpose: PhotoPurpose = "pets") {
   assertOwnedPhotoKey(accountId, photoKey, purpose);
   const { client: s3, bucket } = getStorage();
   try {
@@ -146,7 +152,7 @@ export async function cleanupOrphanedObjects(now = new Date()) {
   if (!storageConfigured) return;
   const { client: s3, bucket } = getStorage();
   const cutoff = now.getTime() - 86_400_000;
-  for (const [targetBucket, prefix] of [[bucket, "pets/"], [bucket, "sitters/"], [env.S3_DOCUMENT_BUCKET, "documents/"]] as const) {
+  for (const [targetBucket, prefix] of [[bucket, "pets/"], [bucket, "sitters/"], [bucket, "users/"], [env.S3_DOCUMENT_BUCKET, "documents/"]] as const) {
     let token: string | undefined;
     do {
       const page = await s3.send(new ListObjectsV2Command({ Bucket: targetBucket, Prefix: prefix, ContinuationToken: token, MaxKeys: 100 }));
@@ -155,7 +161,8 @@ export async function cleanupOrphanedObjects(now = new Date()) {
         const referenced = prefix === "documents/"
           ? await prisma.petDocument.count({ where: { objectKey: object.Key } })
           : prefix === "pets/" ? await prisma.pet.count({ where: { photoKey: object.Key } })
-            : await prisma.sitterProfile.count({ where: { photoKey: object.Key } });
+            : prefix === "users/" ? await prisma.userProfile.count({ where: { photoKey: object.Key } })
+              : await prisma.sitterProfile.count({ where: { photoKey: object.Key } });
         if (!referenced) await s3.send(new DeleteObjectCommand({ Bucket: targetBucket, Key: object.Key }));
       }
       token = page.IsTruncated ? page.NextContinuationToken : undefined;

@@ -1,167 +1,157 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
-import { ScheduleCalendar } from "@/features/scheduling/ScheduleCalendar";
-import { TimePicker } from "@/features/scheduling/TimePicker";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { ScheduleCalendar } from "./ScheduleCalendar";
+import { AvailabilityEditor } from "./AvailabilityEditor";
 import { ApiError } from "@/shared/api/api-client";
-import { addAvailabilityBatch, deleteAvailability, getMySchedule, updateAvailability } from "@/features/marketplace/services/sitters-service";
+import { getSessionRevision, subscribeSessionChanged } from "@/shared/session/session-events";
+import { archiveAvailability, getMySchedule, restoreAvailability } from "@/features/marketplace/services/sitters-service";
 import { marketplaceStyles as styles } from "@/features/marketplace/styles/marketplace";
 import { AvailabilitySlot, ScheduleBooking } from "@/features/marketplace/types/marketplace";
-import { addDays, buildSchedule, calendarWindow, dateKey, dayLabel, formatTime, freeRanges, intersectsDay, localDate, scheduleDates, timeLabel, WEEKDAYS } from "./calendar-utils";
+import { addDays, calendarWindow, dateKey, dayLabel, formatTime, freeRanges, intersectsDay, localDate } from "./calendar-utils";
+import { SERVICE_LABELS as serviceLabels } from "@/features/marketplace/services/service-catalog";
 
-const serviceLabels = { DOG_WALK: "Spacer", DROP_IN: "Wizyta domowa", DAY_CARE: "Opieka dzienna" };
 const blocking = (booking: ScheduleBooking) => ["REQUESTED", "ACCEPTED"].includes(booking.status);
+const protectedSlot = (slot: AvailabilitySlot, now: Date) => Boolean(slot.bookings?.some(booking => blocking(booking) && Date.parse(booking.endsAt) > now.getTime()));
+const singleDay = (slot: AvailabilitySlot) => dateKey(new Date(slot.startsAt)) === dateKey(new Date(Date.parse(slot.endsAt) - 1));
+const sortSlots = (slots: AvailabilitySlot[]) => slots.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+const mergeSlots = (slots: AvailabilitySlot[], changed: AvailabilitySlot[]) => sortSlots([...new Map([...slots, ...changed].map(slot => [slot.id, slot])).values()]);
 const rangeLabel = (range: { startsAt: string; endsAt: string }, day: string) => {
   const start = Math.max(Date.parse(range.startsAt), localDate(day).getTime());
-  const end = Math.min(Date.parse(range.endsAt), localDate(addDays(day, 1)).getTime());
-  return `${formatTime(new Date(start).toISOString())}–${end === localDate(addDays(day, 1)).getTime() ? "24:00" : formatTime(new Date(end).toISOString())}`;
+  const dayEnd = localDate(addDays(day, 1)).getTime(), end = Math.min(Date.parse(range.endsAt), dayEnd);
+  return `${formatTime(new Date(start).toISOString())}–${end === dayEnd ? "24:00" : formatTime(new Date(end).toISOString())}`;
 };
+type Editor = { editing: AvailabilitySlot | null; days: string[]; day: string };
 
 export function AvailabilityCalendar({ slots, onChange, disabled = false, onBusyChange, title = "Twój grafik" }: {
   slots: AvailabilitySlot[]; onChange: (slots: AvailabilitySlot[]) => void; disabled?: boolean; onBusyChange?: (busy: boolean) => void; title?: string;
 }) {
-  const [day, setDay] = useState(dateKey(new Date()));
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [month, setMonth] = useState(dateKey(new Date()).slice(0, 7));
-  const [start, setStart] = useState(9 * 60), [end, setEnd] = useState(17 * 60);
-  const [repeat, setRepeat] = useState(false), [weeks, setWeeks] = useState(2);
-  const [weekdays, setWeekdays] = useState([0, 1, 2, 3, 4]);
-  const [pause, setPause] = useState(false), [pauseStart, setPauseStart] = useState(12 * 60), [pauseEnd, setPauseEnd] = useState(13 * 60);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [removing, setRemoving] = useState<string | null>(null);
+  const [day, setDay] = useState(dateKey(new Date())), [month, setMonth] = useState(dateKey(new Date()).slice(0, 7));
+  const [multiple, setMultiple] = useState(false), [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [editor, setEditor] = useState<Editor | null>(null), [pendingRemoval, setPendingRemoval] = useState<AvailabilitySlot[] | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [success, setSuccess] = useState("");
-  useEffect(() => { onBusyChange?.(busy); return () => onBusyChange?.(false); }, [busy, onBusyChange]);
-  const locked = disabled || busy;
-  const now = new Date();
-  const bookings = slots.flatMap(slot => slot.bookings ?? []).filter(blocking);
+  const [undo, setUndo] = useState<string[] | null>(null);
+  const alive = useRef(true), working = useRef(false);
+  const { width } = useWindowDimensions(), now = new Date(), today = dateKey(now);
+  const locked = disabled || busy || Boolean(editor);
+  useEffect(() => { onBusyChange?.(busy || Boolean(editor)); return () => onBusyChange?.(false); }, [busy, editor, onBusyChange]);
+  useEffect(() => {
+    alive.current = true;
+    const unsubscribe = subscribeSessionChanged(() => { working.current = false; setBusy(false); setEditor(null); setUndo(null); setSuccess(""); setError(""); });
+    return () => { alive.current = false; unsubscribe(); };
+  }, []);
+  const current = (revision: number) => alive.current && getSessionRevision() === revision;
   const daySlots = slots.filter(slot => intersectsDay(slot, day));
-  const dayBookings = bookings.filter(booking => intersectsDay(booking, day)).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const days = editing ? [day] : repeat ? scheduleDates(day, weekdays, weeks) : selectedDays;
+  const dayBookings = [...new Map(daySlots.flatMap(slot => slot.bookings ?? []).filter(booking => blocking(booking) && intersectsDay(booking, day)).map(booking => [booking.id, booking])).values()].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const targetDays = multiple ? selectedDays : [day];
+  // Bulk removal includes only whole intervals within the selected dates.
+  const removable = slots.filter(slot => !protectedSlot(slot, now) && targetDays.some(key => intersectsDay(slot, key)) && (() => {
+    let key = dateKey(new Date(slot.startsAt));
+    const last = dateKey(new Date(Date.parse(slot.endsAt) - 1));
+    for (let count = 0; count < 29; count++, key = addDays(key, 1)) { if (!targetDays.includes(key)) return false; if (key === last) return true; }
+    return false;
+  })());
   const clearMessage = () => { setError(""); setSuccess(""); };
   const selectDay = (value: string) => {
-    setDay(value); setRemoving(null); clearMessage();
-    if (repeat || value < dateKey(now)) return;
-    if (!selectedDays.includes(value) && selectedDays.length >= 28) { setError("Jednym zapisem możesz ustawić maksymalnie 28 dni."); return; }
-    setSelectedDays(current => current.includes(value) ? current.filter(item => item !== value) : [...current, value].sort());
+    setDay(value); setError("");
+    if (!multiple || value < today) return;
+    if (!selectedDays.includes(value) && selectedDays.length >= 28) { setError("Wybierz maksymalnie 28 dni naraz."); return; }
+    setSelectedDays(items => items.includes(value) ? items.filter(item => item !== value) : [...items, value].sort());
   };
-
   const refresh = async (visibleMonth = month) => {
-    setBusy(true); clearMessage();
+    if (working.current) return;
+    working.current = true; setBusy(true); setError("");
+    const revision = getSessionRevision();
     try {
-      const window = calendarWindow(visibleMonth);
-      const response = await getMySchedule(window);
-      // Keep other explicitly loaded months so multi-selection can cross months.
-      onChange([...slots.filter(slot => Date.parse(slot.endsAt) <= Date.parse(window.from) || Date.parse(slot.startsAt) >= Date.parse(window.to)), ...response.slots]
-        .sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
-    }
-    catch (err) { setError(err instanceof ApiError ? err.message : "Nie udało się odświeżyć grafiku."); }
-    finally { setBusy(false); }
+      const window = calendarWindow(visibleMonth), response = await getMySchedule(window);
+      if (current(revision)) onChange(sortSlots([...slots.filter(slot => Date.parse(slot.endsAt) <= Date.parse(window.from) || Date.parse(slot.startsAt) >= Date.parse(window.to)), ...response.slots]));
+    } catch (e) { if (current(revision)) setError(e instanceof Error ? e.message : "Nie udało się odświeżyć grafiku."); }
+    finally { working.current = false; if (current(revision)) setBusy(false); }
   };
-  const save = async () => {
-    if (locked) return;
-    clearMessage();
-    let ranges;
+  const remove = async (targets: AvailabilitySlot[]) => {
+    if (working.current || locked || !targets.length) return;
+    working.current = true; setBusy(true); clearMessage(); setPendingRemoval(null); setUndo(null);
+    const revision = getSessionRevision(), ids = targets.map(slot => slot.id);
     try {
-      ranges = buildSchedule(days, start, end, pause && !editing ? { start: pauseStart, end: pauseEnd } : undefined);
-      for (const range of ranges) {
-        if (slots.some(slot => slot.id !== editing && Date.parse(slot.startsAt) < Date.parse(range.endsAt) && Date.parse(slot.endsAt) > Date.parse(range.startsAt))) {
-          throw new Error(`Termin ${dayLabel(dateKey(new Date(range.startsAt)))} nakłada się na zapisane godziny. Edytuj istniejący przedział lub wybierz inne godziny.`);
-        }
+      await archiveAvailability(ids);
+      if (current(revision)) {
+        onChange(slots.filter(slot => !ids.includes(slot.id))); setUndo(ids);
+        setSuccess(targets.length === 1 ? "Usunięto przedział." : `Usunięto przedziały: ${targets.length}.`);
       }
-    } catch (err) { setError((err as Error).message); return; }
-    setBusy(true);
-    try {
-      if (editing) {
-        const { slot } = await updateAvailability(editing, ranges[0].startsAt, ranges[0].endsAt);
-        onChange(slots.map(item => item.id === editing ? slot : item).sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
-        setEditing(null); setSuccess("Zmieniono godziny dostępności.");
-      } else {
-        const response = await addAvailabilityBatch(ranges);
-        onChange([...slots, ...response.slots].sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
-        setSuccess(`Zapisano grafik: ${days.length} ${days.length === 1 ? "dzień" : "dni"}, ${timeLabel(start)}–${timeLabel(end)}${pause ? `, przerwa ${timeLabel(pauseStart)}–${timeLabel(pauseEnd)}` : ""}.`);
+    } catch (e) {
+      if (current(revision)) {
+        setError(e instanceof ApiError ? e.message : "Nie udało się potwierdzić usunięcia. Możesz odświeżyć grafik lub cofnąć operację.");
+        if (!(e instanceof ApiError)) setUndo(ids);
       }
-    } catch (err) { setError(err instanceof ApiError ? err.message : "Nie udało się zapisać grafiku. Spróbuj ponownie."); }
-    finally { setBusy(false); }
+    } finally { working.current = false; if (current(revision)) setBusy(false); }
   };
-  const remove = async (id: string) => {
-    if (locked) return;
-    clearMessage(); setBusy(true);
-    try { await deleteAvailability(id); onChange(slots.filter(slot => slot.id !== id)); setRemoving(null); setSuccess("Usunięto przedział. Te godziny nie są już dostępne do rezerwacji."); }
-    catch (err) { setError(err instanceof ApiError ? err.message : "Nie udało się usunąć terminu."); }
-    finally { setBusy(false); }
+  const undoRemove = async () => {
+    if (!undo || working.current || locked) return;
+    working.current = true; setBusy(true); setError("");
+    const revision = getSessionRevision();
+    try {
+      const response = await restoreAvailability(undo);
+      if (current(revision)) { onChange(mergeSlots(slots, response.slots)); setUndo(null); setSuccess("Przywrócono usunięte godziny."); }
+    } catch (e) { if (current(revision)) setError(e instanceof Error ? e.message : "Nie udało się cofnąć usunięcia. Spróbuj ponownie."); }
+    finally { working.current = false; if (current(revision)) setBusy(false); }
   };
-  const edit = (slot: AvailabilitySlot) => {
-    const from = new Date(slot.startsAt), to = new Date(slot.endsAt);
-    setDay(dateKey(from)); setStart(from.getHours() * 60 + from.getMinutes());
-    setEnd(dateKey(to) !== dateKey(from) ? 1440 : to.getHours() * 60 + to.getMinutes());
-    setEditing(slot.id); setRemoving(null); clearMessage();
+  const openEditor = (editing: AvailabilitySlot | null = null) => {
+    if (locked || (!editing && (!targetDays.length || targetDays.some(key => key < today)))) return;
+    clearMessage(); setEditor({ editing, day: editing ? dateKey(new Date(editing.startsAt)) : day, days: [...targetDays] });
   };
 
-  return <View style={styles.card}>
-    <View style={styles.spaceBetween}><View style={styles.headerCopy}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.muted}>Zaznacz kilka dni i ustaw im wspólne godziny.</Text></View><TouchableOpacity style={s.iconButton} accessibilityRole="button" accessibilityLabel="Odśwież grafik" disabled={locked} onPress={() => void refresh()}><MaterialCommunityIcons name="refresh" size={22} color="#D35400" /></TouchableOpacity></View>
-    <ScheduleCalendar value={day} values={editing ? [day] : repeat ? days : selectedDays} disabled={locked || Boolean(editing)} onChange={selectDay} onMonthChange={value => { setMonth(value); void refresh(value); }} getMark={key => ({
-      available: slots.some(slot => freeRanges(slot, (slot.bookings ?? []).filter(blocking), now).some(range => intersectsDay(range, key))),
-      booked: bookings.some(booking => intersectsDay(booking, key))
-    })} />
-    {!editing && !repeat ? <View style={s.selection}>
-      <View style={styles.spaceBetween}><Text style={s.windowTitle}>Zaznaczone dni: {selectedDays.length}</Text><TouchableOpacity disabled={locked || !selectedDays.length} accessibilityRole="button" onPress={() => { setSelectedDays([]); clearMessage(); }}><Text style={styles.secondaryButtonText}>Wyczyść wybór</Text></TouchableOpacity></View>
-      <Text style={styles.muted}>Kliknij dzień, aby go dodać lub odznaczyć. Te same godziny zapiszesz dla wszystkich zaznaczonych dni.</Text>
-      <View style={styles.wrap}>{selectedDays.map(key => <TouchableOpacity key={key} style={styles.chip} disabled={locked} accessibilityRole="button" accessibilityLabel={`Odznacz ${dayLabel(key)}`} onPress={() => { setSelectedDays(current => current.filter(item => item !== key)); clearMessage(); }}><Text style={styles.chipText}>{localDate(key).toLocaleDateString("pl-PL", { day: "numeric", month: "short" })} ×</Text></TouchableOpacity>)}</View>
-    </View> : null}
-    <View style={[styles.wrap, { marginTop: 12 }]}><Text style={s.legendFree}>● Wolne godziny</Text><Text style={s.legendBooked}>● Rezerwacje</Text></View>
-    <View style={styles.divider} />
-    <Text style={s.dayTitle}>{dayLabel(day)}</Text>
-    {daySlots.length === 0 ? <View style={s.empty}><MaterialCommunityIcons name="calendar-blank-outline" size={24} color="#A98D7B" /><Text style={styles.muted}>Dzień wolny · brak ustawionej dostępności</Text></View> : daySlots.map(slot => {
-      const free = freeRanges(slot, (slot.bookings ?? []).filter(blocking), now).filter(range => intersectsDay(range, day));
-      const hasActiveBookings = Boolean(slot.bookings?.some(booking => blocking(booking) && Date.parse(booking.endsAt) > now.getTime()));
-      const fromDay = dateKey(new Date(slot.startsAt));
-      const singleDay = dateKey(new Date(Date.parse(slot.endsAt) - 1)) === fromDay;
-      return <View key={slot.id} style={s.availability}>
-        <View style={styles.spaceBetween}><View style={styles.headerCopy}><Text style={s.windowTitle}>{rangeLabel(slot, day)}</Text><Text style={styles.muted}>Godziny przyjmowania rezerwacji</Text></View>
-          {singleDay && Date.parse(slot.startsAt) > now.getTime() ? <TouchableOpacity style={s.iconButton} disabled={locked} accessibilityRole="button" accessibilityLabel={`Edytuj godziny ${rangeLabel(slot, day)}`} onPress={() => edit(slot)}><MaterialCommunityIcons name="pencil-outline" size={20} color="#7A3B12" /></TouchableOpacity> : null}
-          {!hasActiveBookings ? <TouchableOpacity style={s.iconButton} disabled={locked || Boolean(editing)} accessibilityRole="button" accessibilityLabel={`Usuń godziny ${rangeLabel(slot, day)}`} onPress={() => { setRemoving(slot.id); clearMessage(); }}><MaterialCommunityIcons name="trash-can-outline" size={20} color="#B42318" /></TouchableOpacity> : null}
-        </View>
-        {free.length ? <Text style={s.legendFree}>Wolne: {free.map(range => rangeLabel(range, day)).join(", ")}</Text> : <Text style={styles.muted}>{Date.parse(slot.endsAt) <= now.getTime() ? "Termin minął" : "Brak wolnych godzin w tym przedziale"}</Text>}
-        {hasActiveBookings ? <Text style={styles.muted}>Aktywne rezerwacje są chronione przed zmianą godzin.</Text> : null}
-        {removing === slot.id ? <View style={{ marginTop: 8 }}><Text style={styles.body}>Usunąć ten przedział z grafiku?{!singleDay ? " Usunięty zostanie cały przedział, również w pozostałe dni." : ""}</Text><View style={styles.row}><TouchableOpacity style={[styles.secondaryButton, styles.dangerButton, styles.half]} disabled={locked} accessibilityRole="button" onPress={() => remove(slot.id)}><Text style={styles.dangerButtonText}>Usuń przedział</Text></TouchableOpacity><TouchableOpacity style={[styles.secondaryButton, styles.half]} disabled={locked} accessibilityRole="button" onPress={() => setRemoving(null)}><Text style={styles.secondaryButtonText}>Zostaw</Text></TouchableOpacity></View></View> : null}
-      </View>;
-    })}
-    {dayBookings.map(booking => <TouchableOpacity key={booking.id} style={s.booking} disabled={locked} accessibilityRole="button" accessibilityLabel={`Rezerwacja ${booking.pet.name}, ${rangeLabel(booking, day)}`} onPress={() => router.push("/marketplace/bookings" as never)}>
-      <View style={styles.spaceBetween}><Text style={s.bookingTime}>{rangeLabel(booking, day)}</Text><Text style={s.bookingStatus}>{booking.status === "REQUESTED" ? "Oczekuje" : "Potwierdzona"}</Text></View><Text style={s.windowTitle}>{booking.pet.name} · {serviceLabels[booking.sitterService.type]}</Text>
-    </TouchableOpacity>)}
-    <View style={styles.divider} />
-    <View style={styles.spaceBetween}><Text style={styles.cardTitle}>{editing ? "Zmień godziny" : "Zaplanuj dostępność"}</Text>{editing ? <TouchableOpacity accessibilityRole="button" disabled={locked} onPress={() => { setEditing(null); clearMessage(); }}><Text style={styles.secondaryButtonText}>Anuluj edycję</Text></TouchableOpacity> : null}</View>
-    <Text style={[styles.muted, { marginBottom: 12 }]}>{editing ? "Nowe godziny muszą obejmować aktywne rezerwacje. Anulowane wizyty nie blokują zmian." : `Wspólne godziny dla ${days.length} ${days.length === 1 ? "zaznaczonego dnia" : "zaznaczonych dni"}. Właściciele wybiorą długość opieki w tym przedziale.`}</Text>
-    {!editing ? <View style={[styles.wrap, { marginBottom: 14 }]}>{[{ label: "Rano", start: 8 * 60, end: 12 * 60 }, { label: "Popołudnie", start: 14 * 60, end: 18 * 60 }, { label: "Cały dzień", start: 9 * 60, end: 17 * 60 }].map(preset => <TouchableOpacity key={preset.label} accessibilityRole="button" disabled={locked} style={styles.chip} onPress={() => { setStart(preset.start); setEnd(preset.end); setPause(false); clearMessage(); }}><Text style={styles.chipText}>{preset.label} {timeLabel(preset.start)}–{timeLabel(preset.end)}</Text></TouchableOpacity>)}</View> : null}
-    <View style={styles.row}><TimePicker label="Początek pracy" value={start} onChange={value => { setStart(value); clearMessage(); }} disabled={locked} /><TimePicker label="Koniec pracy" value={end} onChange={value => { setEnd(value); clearMessage(); }} disabled={locked} allowMidnight /></View>
-    {!editing ? <>
-      <View style={s.setting}><View style={styles.headerCopy}><Text style={s.windowTitle}>Przerwa w ciągu dnia</Text><Text style={styles.muted}>W tym czasie nikt nie zarezerwuje opieki.</Text></View><Switch value={pause} disabled={locked} onValueChange={value => { setPause(value); clearMessage(); }} trackColor={{ false: "#DCCABD", true: "#D35400" }} accessibilityLabel="Dodaj przerwę" /></View>
-      {pause ? <View style={styles.row}><TimePicker label="Początek przerwy" value={pauseStart} onChange={value => { setPauseStart(value); clearMessage(); }} disabled={locked} /><TimePicker label="Koniec przerwy" value={pauseEnd} onChange={value => { setPauseEnd(value); clearMessage(); }} disabled={locked} /></View> : null}
-      <View style={s.setting}><View style={styles.headerCopy}><Text style={s.windowTitle}>Powtórz w wybrane dni</Text><Text style={styles.muted}>Ustaw godziny raz na kilka tygodni.</Text></View><Switch value={repeat} disabled={locked} onValueChange={value => { setRepeat(value); clearMessage(); }} trackColor={{ false: "#DCCABD", true: "#D35400" }} accessibilityLabel="Powtarzaj grafik" /></View>
-      {repeat ? <View style={s.repeat}>
-        <Text style={styles.label}>Dni tygodnia</Text><View style={styles.wrap}>{WEEKDAYS.map((label, index) => <TouchableOpacity key={label} style={[styles.chip, weekdays.includes(index) && styles.chipActive]} disabled={locked} accessibilityRole="button" accessibilityLabel={`Powtarzaj: ${label}`} accessibilityState={{ selected: weekdays.includes(index) }} onPress={() => { setWeekdays(current => current.includes(index) ? current.filter(item => item !== index) : [...current, index]); clearMessage(); }}><Text style={[styles.chipText, weekdays.includes(index) && styles.chipTextActive]}>{label}</Text></TouchableOpacity>)}</View>
-        <Text style={[styles.label, { marginTop: 14 }]}>Okres od wybranej daty</Text><View style={styles.wrap}>{[1, 2, 4].map(count => <TouchableOpacity key={count} style={[styles.chip, weeks === count && styles.chipActive]} disabled={locked} accessibilityRole="button" accessibilityState={{ selected: weeks === count }} onPress={() => { setWeeks(count); clearMessage(); }}><Text style={[styles.chipText, weeks === count && styles.chipTextActive]}>{count === 1 ? "1 tydzień" : `${count} tygodnie`}</Text></TouchableOpacity>)}</View>
-        <Text style={[styles.muted, { marginTop: 12 }]}>Od {localDate(day).toLocaleDateString("pl-PL")} do {localDate(addDays(day, weeks * 7 - 1)).toLocaleDateString("pl-PL")} · {days.length} dni. Grafik nie przedłuża się automatycznie.</Text>
-      </View> : null}
-    </> : null}
-    {error ? <Text style={[styles.statusError, { marginTop: 14 }]} accessibilityRole="alert">{error}</Text> : null}
-    {success ? <Text style={[styles.statusSuccess, { marginTop: 14 }]} accessibilityRole="alert">{success}</Text> : null}
-    <TouchableOpacity style={[styles.primaryButton, { marginTop: 16 }, (locked || !days.length) && styles.buttonDisabled]} accessibilityRole="button" disabled={locked || !days.length} onPress={save}>{busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>{editing ? "Zapisz godziny" : `Dodaj grafik · ${days.length} ${days.length === 1 ? "dzień" : "dni"}`}</Text>}</TouchableOpacity>
-    <Text style={[styles.muted, { marginTop: 8 }]}>Grafik zapisuje się od razu. Rezerwacje automatycznie zajmują czas w kalendarzu.</Text>
+  return <View style={[styles.card, s.shell]}>
+    <View style={styles.spaceBetween}><View style={styles.headerCopy}><Text style={styles.cardTitle}>{title}</Text><Text style={styles.muted}>Wybierz dzień, aby zobaczyć i zmienić jego godziny.</Text></View><TouchableOpacity style={s.iconButton} accessibilityRole="button" accessibilityLabel="Odśwież grafik" disabled={locked} onPress={() => void refresh()}>{busy ? <ActivityIndicator color="#D35400" /> : <MaterialCommunityIcons name="refresh" size={22} color="#D35400" />}</TouchableOpacity></View>
+    <View style={[s.layout, width >= 900 && s.wide]}>
+      <View style={[s.calendarPane, width >= 900 && s.calendarWide]}>
+        <View style={s.mode}>{[false, true].map(value => <TouchableOpacity key={String(value)} accessibilityRole="button" accessibilityState={{ selected: multiple === value }} aria-pressed={multiple === value} disabled={locked} style={[s.modeButton, multiple === value && s.modeActive]} onPress={() => { setMultiple(value); setSelectedDays(value && day >= today ? [day] : []); setError(""); }}><Text style={[s.modeText, multiple === value && s.modeActiveText]}>{value ? "Kilka dni" : "Jeden dzień"}</Text></TouchableOpacity>)}</View>
+        <ScheduleCalendar value={day} visibleMonth={month} values={multiple ? selectedDays : undefined} disabled={locked} onChange={selectDay} onMonthChange={value => { setMonth(value); setDay(value === today.slice(0, 7) ? today : `${value}-01`); void refresh(value); }} getMark={key => ({
+          available: slots.some(slot => freeRanges(slot, (slot.bookings ?? []).filter(blocking), now).some(range => intersectsDay(range, key))),
+          booked: slots.some(slot => slot.bookings?.some(booking => blocking(booking) && intersectsDay(booking, key)))
+        })} />
+        <View style={s.legend}><Text style={s.legendFree}>● Wolne godziny</Text><Text style={s.legendBooked}>● Rezerwacje</Text></View>
+        {multiple ? <View style={s.selection}>
+          <View style={styles.spaceBetween}><Text style={s.windowTitle}>Zaznaczone dni: {selectedDays.length}</Text><TouchableOpacity accessibilityRole="button" disabled={locked || !selectedDays.length} onPress={() => setSelectedDays([])} style={s.clear}><Text style={styles.secondaryButtonText}>Wyczyść wybór</Text></TouchableOpacity></View>
+          <Text style={styles.muted}>Kliknij daty, które chcesz zmienić. Maksymalnie 28 dni.</Text>
+          <View style={styles.wrap}>{selectedDays.slice(0, 6).map(key => <TouchableOpacity key={key} accessibilityRole="button" accessibilityLabel={`Odznacz ${dayLabel(key)}`} disabled={locked} style={styles.chip} onPress={() => setSelectedDays(items => items.filter(item => item !== key))}><Text style={styles.chipText}>{localDate(key).toLocaleDateString("pl-PL", { day: "numeric", month: "short" })} ×</Text></TouchableOpacity>)}{selectedDays.length > 6 ? <Text style={styles.muted}>+{selectedDays.length - 6} dni</Text> : null}</View>
+        </View> : null}
+      </View>
+      <View style={[s.dayPane, width >= 900 && s.dayWide]}>
+        <View style={s.dayHeader}><Text style={s.dayTitle}>{multiple ? `Wybrane dni: ${selectedDays.length}` : dayLabel(day)}</Text><Text style={styles.muted}>{multiple ? "Dodaj te same godziny lub usuń wolne przedziały z zaznaczonych dni." : daySlots.length ? `Przedziały: ${daySlots.length} · Rezerwacje: ${dayBookings.length}` : "Brak zaplanowanych godzin"}</Text></View>
+    {error ? <View style={s.error}><Text style={styles.dangerButtonText} accessibilityRole="alert">{error}</Text></View> : null}
+    {success || undo ? <View style={s.notice}><Text style={[styles.body, styles.headerCopy]} accessibilityLiveRegion="polite">{success || "Możesz cofnąć ostatnią operację."}</Text>{undo ? <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cofnij usunięcie" disabled={locked} onPress={() => void undoRemove()} style={s.undo}><MaterialCommunityIcons name="undo" size={18} color="#D35400" /><Text style={styles.secondaryButtonText}>Cofnij usunięcie</Text></TouchableOpacity> : null}</View> : null}
+
+        <TouchableOpacity style={[styles.primaryButton, s.addButton, (locked || !targetDays.length || targetDays.some(key => key < today)) && styles.buttonDisabled]} accessibilityRole="button" accessibilityLabel={multiple ? `Dodaj godziny · ${selectedDays.length} dni` : "Dodaj godziny"} disabled={locked || !targetDays.length || targetDays.some(key => key < today)} onPress={() => openEditor()}><MaterialCommunityIcons name="plus" size={20} color="#FFFFFF" /><Text style={styles.primaryButtonText}>{multiple ? `Dodaj godziny · ${selectedDays.length} dni` : "Dodaj godziny"}</Text></TouchableOpacity>
+        {removable.length > 1 ? <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Usuń wolne przedziały (${removable.length})`} style={s.removeAll} disabled={locked || removable.length > 168} onPress={() => void remove(removable)}><MaterialCommunityIcons name="trash-can-outline" size={18} color="#B42318" /><Text style={styles.dangerButtonText}>Usuń wolne przedziały ({removable.length})</Text></TouchableOpacity> : multiple && removable.length === 1 ? <TouchableOpacity accessibilityRole="button" style={s.removeAll} disabled={locked} onPress={() => void remove(removable)}><Text style={styles.dangerButtonText}>Usuń wolny przedział (1)</Text></TouchableOpacity> : null}
+        {multiple ? <View style={s.multiInfo}><MaterialCommunityIcons name="calendar-multiselect" size={30} color="#D35400" /><Text style={styles.body}>Zmiany obejmą zaznaczone daty. Zachowamy przedziały z rezerwacjami oraz te, które obejmują niezaznaczone dni.</Text><Text style={styles.muted}>Przełącz na „Jeden dzień”, aby edytować pojedynczy przedział.</Text></View> : <>
+          {!daySlots.length ? <View style={s.empty}><MaterialCommunityIcons name="calendar-plus" size={32} color="#C2A28E" /><Text style={styles.body}>Masz wolne tego dnia.</Text><Text style={styles.muted}>Dodaj godziny przyciskiem powyżej.</Text></View> : null}
+          <View style={s.slotList}>{daySlots.map(slot => {
+            const free = freeRanges(slot, (slot.bookings ?? []).filter(blocking), now).filter(range => intersectsDay(range, day));
+            const protectedByBooking = protectedSlot(slot, now);
+            return <View key={slot.id} style={s.availability}>
+              <View style={styles.spaceBetween}><View style={styles.headerCopy}><Text style={s.time}>{rangeLabel(slot, day)}</Text><Text style={styles.muted}>{protectedByBooking ? "Aktywna rezerwacja" : "Dostępny przedział"}</Text></View>
+                {singleDay(slot) && Date.parse(slot.startsAt) > now.getTime() ? <TouchableOpacity style={s.iconButton} disabled={locked} accessibilityRole="button" accessibilityLabel={`Edytuj godziny ${rangeLabel(slot, day)}`} onPress={() => openEditor(slot)}><MaterialCommunityIcons name="pencil-outline" size={20} color="#7A3B12" /></TouchableOpacity> : null}
+                {!protectedByBooking ? <TouchableOpacity style={s.iconButton} disabled={locked} accessibilityRole="button" accessibilityLabel={`Usuń godziny ${rangeLabel(slot, day)}`} onPress={() => singleDay(slot) ? void remove([slot]) : setPendingRemoval([slot])}><MaterialCommunityIcons name="trash-can-outline" size={20} color="#B42318" /></TouchableOpacity> : <MaterialCommunityIcons name="lock-outline" size={18} color="#A17645" />}
+              </View>
+              {free.length ? <Text style={s.legendFree}>Wolne: {free.map(range => rangeLabel(range, day)).join(", ")}</Text> : <Text style={styles.muted}>{Date.parse(slot.endsAt) <= now.getTime() ? "Termin minął" : "Brak wolnych godzin"}</Text>}
+            </View>;
+          })}</View>
+          {dayBookings.map(booking => <TouchableOpacity key={booking.id} style={s.booking} disabled={locked} accessibilityRole="button" accessibilityLabel={`Rezerwacja ${booking.pet.name}, ${rangeLabel(booking, day)}`} onPress={() => router.push("/marketplace/bookings")}><View style={styles.spaceBetween}><Text style={s.bookingTime}>{rangeLabel(booking, day)}</Text><Text style={styles.muted}>{booking.status === "REQUESTED" ? "Oczekuje" : "Potwierdzona"}</Text></View><Text style={s.windowTitle}>{booking.pet.name} · {serviceLabels[booking.sitterService.type]}</Text></TouchableOpacity>)}
+        </>}
+      </View>
+    </View>
+    {editor ? <AvailabilityEditor day={editor.day} selectedDays={editor.days} editing={editor.editing} slots={slots} onClose={() => setEditor(null)} onSaved={(changed, days) => { onChange(mergeSlots(slots, changed)); setDay(days[0]); setMonth(days[0].slice(0, 7)); setEditor(null); setMultiple(false); setSelectedDays([]); setUndo(null); setSuccess(editor.editing ? "Zmieniono godziny dostępności." : `Zapisano grafik: ${days.length} ${days.length === 1 ? "dzień" : "dni"}.`); }} /> : null}
+    {pendingRemoval ? <Modal visible transparent animationType="fade" onRequestClose={() => setPendingRemoval(null)}><View style={s.overlay}><Pressable style={StyleSheet.absoluteFill} accessibilityRole="button" accessibilityLabel="Zostaw przedział" onPress={() => setPendingRemoval(null)} /><View style={s.confirm} accessibilityViewIsModal><Text style={styles.cardTitle}>Ten przedział obejmuje kilka dni</Text><Text style={styles.body}>Usunięty zostanie cały przedział, również w pozostałe dni. Możesz później cofnąć usunięcie.</Text><TouchableOpacity accessibilityRole="button" style={[styles.secondaryButton, styles.dangerButton]} onPress={() => void remove(pendingRemoval)}><Text style={styles.dangerButtonText}>Usuń cały przedział</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={() => setPendingRemoval(null)}><Text style={styles.secondaryButtonText}>Zostaw</Text></TouchableOpacity></View></View></Modal> : null}
   </View>;
 }
-
 const s = StyleSheet.create({
-  iconButton: { minWidth: 40, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  legendFree: { color: "#16815D", fontSize: 12, lineHeight: 19 }, legendBooked: { color: "#9A5B12", fontSize: 12, lineHeight: 19 },
-  dayTitle: { color: "#3D2415", fontSize: 16, fontWeight: "800", textTransform: "capitalize", marginBottom: 12 },
-  empty: { alignItems: "center", padding: 20, gap: 8, borderRadius: 14, backgroundColor: "#FFF8F0", marginBottom: 8 },
-  availability: { borderWidth: 1, borderColor: "#CCE7DA", backgroundColor: "#F5FBF8", borderRadius: 14, padding: 12, marginBottom: 10, gap: 6 },
-  windowTitle: { color: "#3D2415", fontSize: 13, fontWeight: "700", lineHeight: 20 },
-  booking: { backgroundColor: "#FFF3DF", borderLeftWidth: 4, borderLeftColor: "#B3630C", padding: 12, borderRadius: 12, marginBottom: 8 },
-  bookingTime: { color: "#7A3B12", fontSize: 13, fontWeight: "800" }, bookingStatus: { color: "#9A5B12", fontSize: 11, fontWeight: "700" },
-  setting: { flexDirection: "row", alignItems: "center", gap: 12, marginVertical: 16 },
-  repeat: { padding: 12, borderRadius: 14, backgroundColor: "#FFF8F0" },
-  selection: { gap: 10, backgroundColor: "#FFF8F0", padding: 12, borderRadius: 14, marginTop: 12 }
+  shell: { width: "100%", maxWidth: 1120, alignSelf: "center" }, layout: { gap: 24, marginTop: 14 }, wide: { flexDirection: "row", alignItems: "flex-start" }, calendarPane: { minWidth: 0 }, calendarWide: { flex: 1, maxWidth: 480 }, dayWide: { flex: 1 }, dayPane: { minWidth: 0, backgroundColor: "#FFFCF8", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#F2E4D8" },
+  mode: { flexDirection: "row", backgroundColor: "#FFF3E9", padding: 4, borderRadius: 13, marginBottom: 16 }, modeButton: { flex: 1, minHeight: 40, justifyContent: "center", alignItems: "center", borderRadius: 10 }, modeActive: { backgroundColor: "#FFFFFF" }, modeText: { color: "#8A6D5B", fontWeight: "700", fontSize: 13 }, modeActiveText: { color: "#D35400" },
+  iconButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }, legend: { flexDirection: "row", gap: 12, justifyContent: "center", marginTop: 10 }, legendFree: { color: "#16815D", fontSize: 12, lineHeight: 19 }, legendBooked: { color: "#9A5B12", fontSize: 12, lineHeight: 19 },
+  dayHeader: { gap: 4, marginBottom: 12 }, dayTitle: { color: "#3D2415", fontSize: 18, fontWeight: "800", textTransform: "capitalize" }, addButton: { flexDirection: "row", gap: 8, marginTop: 0, marginBottom: 12 }, removeAll: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, minHeight: 44, marginBottom: 12 },
+  availability: { borderWidth: 1, borderColor: "#CCE7DA", backgroundColor: "#F5FBF8", borderRadius: 12, padding: 12, gap: 4 }, slotList: { gap: 10 }, time: { fontSize: 17, fontWeight: "800", color: "#3D2415" }, windowTitle: { color: "#3D2415", fontSize: 13, fontWeight: "700", lineHeight: 20 },
+  empty: { alignItems: "center", paddingVertical: 28, gap: 8 }, multiInfo: { alignItems: "center", padding: 16, gap: 12 }, booking: { marginTop: 12, backgroundColor: "#FFF3DF", borderLeftWidth: 3, borderLeftColor: "#B3630C", padding: 12, borderRadius: 12, gap: 4 }, bookingTime: { color: "#7A3B12", fontSize: 13, fontWeight: "800" },
+  selection: { backgroundColor: "#FFF8F0", borderRadius: 12, padding: 12, marginTop: 12, gap: 8 }, clear: { minHeight: 40, justifyContent: "center" }, notice: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 18, padding: 12, borderRadius: 12, backgroundColor: "#EAF7EF" }, undo: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 }, error: { backgroundColor: "#FFF0EE", borderRadius: 12, padding: 12, marginTop: 16 },
+  overlay: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(61,36,21,0.42)", padding: 20 }, confirm: { width: "100%", maxWidth: 420, padding: 24, gap: 12, borderRadius: 20, backgroundColor: "#FFFFFF" }
 });

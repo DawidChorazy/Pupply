@@ -66,9 +66,10 @@ export function logoutAll() {
   return authenticatedApiRequest<void>(API_ENDPOINTS.auth.logoutAll, { method: "POST" });
 }
 
-export function updateMyProfile(payload: UpdateUserProfilePayload) {
+export function updateMyProfile(payload: UpdateUserProfilePayload, signal?: AbortSignal) {
   return authenticatedApiRequest<ProfileResponse>(API_ENDPOINTS.users.me, {
     method: "PATCH",
+    signal,
     body: JSON.stringify(payload)
   });
 }

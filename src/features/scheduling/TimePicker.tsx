@@ -4,8 +4,8 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View 
 import { timeLabel } from "@/features/scheduling/calendar-utils";
 import { marketplaceStyles as styles } from "@/features/marketplace/styles/marketplace";
 
-export function TimePicker({ label, value, onChange, disabled, allowMidnight = false }: {
-  label: string; value: number; onChange: (value: number) => void; disabled?: boolean; allowMidnight?: boolean;
+export function TimePicker({ label, value, onChange, disabled, allowMidnight = false, min = 0, max = 1440 }: {
+  label: string; value: number; onChange: (value: number) => void; disabled?: boolean; allowMidnight?: boolean; min?: number; max?: number;
 }) {
   const [open, setOpen] = useState(false);
   return <View style={{ flex: 1 }}>
@@ -14,15 +14,16 @@ export function TimePicker({ label, value, onChange, disabled, allowMidnight = f
       <MaterialCommunityIcons name="clock-outline" size={18} color="#D35400" /><Text style={s.value}>{timeLabel(value)}</Text><MaterialCommunityIcons name="chevron-down" size={18} color="#8A6D5B" />
     </TouchableOpacity>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-      <Pressable style={s.backdrop} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Zamknij wybór godziny">
-        <Pressable style={s.dialog} onPress={event => event.stopPropagation()} accessibilityViewIsModal>
+      <View style={s.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Zamknij wybór godziny" />
+        <View style={s.dialog} accessibilityViewIsModal>
           <View style={styles.spaceBetween}><Text style={styles.cardTitle}>{label}</Text><TouchableOpacity style={s.close} accessibilityRole="button" accessibilityLabel="Zamknij" onPress={() => setOpen(false)}><MaterialCommunityIcons name="close" size={22} color="#3D2415" /></TouchableOpacity></View>
           <Text style={[styles.muted, { marginBottom: 12 }]}>Wybierz godzinę</Text>
           <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={s.times}>
-            {Array.from({ length: allowMidnight ? 97 : 96 }, (_, index) => index * 15).map(minutes => <TouchableOpacity key={minutes} style={[s.time, value === minutes && styles.chipActive]} accessibilityRole="button" accessibilityLabel={timeLabel(minutes)} accessibilityState={{ selected: value === minutes }} onPress={() => { onChange(minutes); setOpen(false); }}><Text style={[styles.chipText, value === minutes && styles.chipTextActive]}>{timeLabel(minutes)}</Text></TouchableOpacity>)}
+            {Array.from({ length: allowMidnight ? 97 : 96 }, (_, index) => index * 15).filter(minutes => minutes >= min && minutes <= max).map(minutes => <TouchableOpacity key={minutes} style={[s.time, value === minutes && styles.chipActive]} accessibilityRole="button" accessibilityLabel={timeLabel(minutes)} accessibilityState={{ selected: value === minutes }} onPress={() => { onChange(minutes); setOpen(false); }}><Text style={[styles.chipText, value === minutes && styles.chipTextActive]}>{timeLabel(minutes)}</Text></TouchableOpacity>)}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   </View>;
 }

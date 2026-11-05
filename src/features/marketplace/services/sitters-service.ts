@@ -56,15 +56,27 @@ export function deleteAvailability(slotId: string) {
   });
 }
 
-export function addAvailabilityBatch(slots: { startsAt: string; endsAt: string }[]) {
-  return authenticatedApiRequest<{ slots: AvailabilitySlot[] }>(API_ENDPOINTS.sitters.availabilityBatch, {
-    method: "POST", body: JSON.stringify({ slots })
+export function archiveAvailability(slotIds: string[]) {
+  return authenticatedApiRequest<{ slotIds: string[] }>(`${API_ENDPOINTS.sitters.availability}/archive`, {
+    method: "POST", body: JSON.stringify({ slotIds })
   });
 }
 
-export function updateAvailability(slotId: string, startsAt: string, endsAt: string) {
+export function restoreAvailability(slotIds: string[]) {
+  return authenticatedApiRequest<{ slots: AvailabilitySlot[] }>(`${API_ENDPOINTS.sitters.availability}/restore`, {
+    method: "POST", body: JSON.stringify({ slotIds })
+  });
+}
+
+export function addAvailabilityBatch(slots: { startsAt: string; endsAt: string }[], signal?: AbortSignal) {
+  return authenticatedApiRequest<{ slots: AvailabilitySlot[] }>(API_ENDPOINTS.sitters.availabilityBatch, {
+    method: "POST", body: JSON.stringify({ slots }), signal
+  });
+}
+
+export function updateAvailability(slotId: string, startsAt: string, endsAt: string, signal?: AbortSignal) {
   return authenticatedApiRequest<{ slot: AvailabilitySlot }>(API_ENDPOINTS.sitters.availabilityDetail(slotId), {
-    method: "PATCH", body: JSON.stringify({ startsAt, endsAt })
+    method: "PATCH", body: JSON.stringify({ startsAt, endsAt }), signal
   });
 }
 

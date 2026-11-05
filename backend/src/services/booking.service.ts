@@ -13,6 +13,7 @@ function requireUser(role: AccountRole) {
 }
 
 const bookingInclude = {
+  review: true,
   pet: { select: { id: true, name: true, breed: true } },
   owner: { select: { id: true, userProfile: { select: { fullName: true } } } },
   sitter: { select: { id: true, userProfile: { select: { fullName: true } } } },

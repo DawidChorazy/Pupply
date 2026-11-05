@@ -1,3 +1,5 @@
+import { Review, ReviewSummary } from "@/features/reviews/types/reviews";
+
 export type SitterServiceType = "DOG_WALK" | "DROP_IN" | "DAY_CARE";
 export type BookingStatus = "REQUESTED" | "ACCEPTED" | "REJECTED" | "CANCELLED" | "COMPLETED" | "EXPIRED";
 export type BookingPerspective = "owner" | "sitter" | "all";
@@ -57,6 +59,7 @@ export interface SitterProfile {
 }
 
 export interface SitterSearchItem {
+  ratingSummary?: ReviewSummary;
   id: string;
   displayName: string;
   bio: string;
@@ -91,6 +94,7 @@ export interface CreateSitterProfilePayload {
 export type UpdateSitterProfilePayload = Partial<CreateSitterProfilePayload>;
 
 export interface SearchSittersParams {
+  minRating?: number;
   latitude: number;
   longitude: number;
   radiusKm?: number;
@@ -102,6 +106,7 @@ export interface SearchSittersParams {
 }
 
 export interface Booking {
+  review?: Review | null;
   id: string;
   ownerAccountId: string;
   sitterAccountId: string;

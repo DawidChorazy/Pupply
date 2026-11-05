@@ -53,11 +53,16 @@ export const createAvailabilitySchema = z
   .refine((data) => data.startsAt > new Date(), { path: ["startsAt"], message: "Slot must be in the future" });
 
 export const batchAvailabilitySchema = z.object({
-  slots: z.array(createAvailabilitySchema).min(1).max(56)
+  // 28 days, each split into at most six working intervals by five breaks.
+  slots: z.array(createAvailabilitySchema).min(1).max(168)
 }).refine(({ slots }) => {
   const sorted = [...slots].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   return sorted.every((slot, index) => index === 0 || slot.startsAt >= sorted[index - 1].endsAt);
 }, { path: ["slots"], message: "Availability intervals must not overlap" });
+
+export const availabilitySelectionSchema = z.object({
+  slotIds: z.array(z.string().min(1).max(100)).min(1).max(168)
+}).strict().refine(({ slotIds }) => new Set(slotIds).size === slotIds.length, "Nie powtarzaj tych samych przedziałów.");
 
 const calendarFields = {
   from: z.coerce.date().optional(), to: z.coerce.date().optional(),
@@ -74,6 +79,7 @@ export const searchSittersSchema = z
     latitude: z.coerce.number().min(-90).max(90),
     longitude: z.coerce.number().min(-180).max(180),
     radiusKm: z.coerce.number().positive().max(100).default(25),
+    minRating: z.coerce.number().min(1).max(5).optional(),
     serviceType: z.enum(["DOG_WALK", "DROP_IN", "DAY_CARE"]).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),

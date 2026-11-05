@@ -52,6 +52,8 @@ export interface ProfileResponse {
     fullName: string;
     phone: string;
     birthDate: string | null;
+    photoKey?: string | null;
+    photoUrl?: string | null;
     emailVerifiedAt?: string | null;
   };
 }
@@ -60,4 +62,5 @@ export interface UpdateUserProfilePayload {
   fullName?: string;
   phone?: string;
   birthDate?: string | null;
+  photoKey?: string | null;
 }

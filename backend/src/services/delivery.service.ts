@@ -11,7 +11,8 @@ export async function enqueueNotifications(now = new Date()) {
     include: { account: { include: { pushDevices: true } } } });
   for (const notification of notifications) await prisma.$transaction(async tx => {
     const claimed = await tx.notification.updateMany({ where: { id: notification.id, deliveryEnqueuedAt: null }, data: { deliveryEnqueuedAt: now } });
-    if (!claimed.count || notification.account.blockedAt || notification.account.deactivatedAt) return;
+    if (!claimed.count || notification.account.blockedAt || notification.account.deactivatedAt
+      || (notification.type === "NEW_MESSAGE" && notification.readAt)) return;
     const deliveries = [
       ...(notification.account.emailNotifications && notification.account.emailVerifiedAt ? [{ channel: "email", destination: notification.account.email }] : []),
       ...(env.PUSH_ENABLED ? notification.account.pushDevices.map(device => ({ channel: "push", destination: device.token })) : [])
@@ -30,6 +31,9 @@ export async function deliverNotifications(now = new Date()) {
     if (!claimed.count) return;
     try {
       const account = job.notification.account;
+      if (job.notification.type === "NEW_MESSAGE" && (await prisma.notification.findUnique({ where: { id: job.notificationId }, select: { readAt: true } }))?.readAt) {
+        await prisma.notificationDelivery.update({ where: { id: job.id }, data: { failedAt: claimAt, lockedUntil: null } }); return;
+      }
       if (account.blockedAt || account.deactivatedAt || (job.channel === "email" && (!account.emailNotifications || !account.emailVerifiedAt || account.email !== job.destination))) {
         await prisma.notificationDelivery.update({ where: { id: job.id }, data: { failedAt: claimAt, lockedUntil: null } }); return;
       }
@@ -44,7 +48,9 @@ export async function deliverNotifications(now = new Date()) {
         }
         const response = await fetch("https://exp.host/--/api/v2/push/send", {
           method: "POST", headers: pushHeaders(), signal: AbortSignal.timeout(10_000),
-          body: JSON.stringify({ to: job.destination, title: "Pupply", body: "Masz nowe powiadomienie w aplikacji.", data: { notificationId: job.notificationId }, sound: "default" })
+          body: JSON.stringify({ to: job.destination, title: "Pupply", body: "Masz nowe powiadomienie w aplikacji.",
+            data: { notificationId: job.notificationId, accountId: account.id,
+              ...(job.notification.conversationId ? { conversationId: job.notification.conversationId } : {}) }, sound: "default" })
         });
         if (!response.ok) throw new Error("Push provider unavailable");
         const { data: ticket } = z.object({ data: ticketSchema }).parse(await response.json());

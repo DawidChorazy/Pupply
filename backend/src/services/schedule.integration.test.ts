@@ -31,6 +31,91 @@ afterEach(async () => {
 afterAll(() => prisma.$disconnect());
 
 describe("calendar schedule", () => {
+  it("archives whole selected days once and restores the original IDs and hours idempotently", async () => {
+    const f = await fixture();
+    const slots = (await f.batch([f.interval(0, 60), f.interval(90, 180), f.interval(1440, 1500)])).body.slots;
+    const slotIds = slots.map((slot: { id: string }) => slot.id);
+    const change = (action: string) => request(app).post(`/api/sitters/me/availability/${action}`).set("Authorization", f.sitter.auth).send({ slotIds });
+    expect((await change("archive")).status).toBe(200);
+    expect((await change("archive")).status).toBe(200);
+    expect((await request(app).get(f.publicUrl)).body.availability).toHaveLength(0);
+    const restored = await change("restore"); expect(restored.status).toBe(200);
+    expect(restored.body.slots.map((slot: { id: string }) => slot.id)).toEqual(slotIds);
+    expect(restored.body.slots[1].startsAt).toBe(f.interval(90, 180).startsAt);
+    expect((await change("restore")).status).toBe(200);
+    expect(await prisma.availabilitySlot.count({ where: { sitterProfileId: f.profile.id } })).toBe(3);
+  });
+
+  it("rejects unknown, foreign, duplicate and oversized selections without partially archiving", async () => {
+    const f = await fixture(), other = await fixture();
+    const own = (await f.batch([f.interval(0, 60)])).body.slots[0];
+    const foreign = (await other.batch([other.interval(0, 60)])).body.slots[0];
+    for (const action of ["archive", "restore"]) {
+      const change = (slotIds: string[], auth = f.sitter.auth) => request(app).post(`/api/sitters/me/availability/${action}`).set("Authorization", auth).send({ slotIds });
+      for (const ids of [[], [own.id, own.id], Array.from({ length: 169 }, (_, index) => String(index))]) expect((await change(ids)).status).toBe(400);
+      expect((await change([own.id, foreign.id])).status).toBe(404);
+      expect((await change([own.id, "missing"])).status).toBe(404);
+      expect((await request(app).post(`/api/sitters/me/availability/${action}`).send({ slotIds: [own.id] })).status).toBe(401);
+    }
+    expect((await prisma.availabilitySlot.findUniqueOrThrow({ where: { id: own.id } })).archivedAt).toBeNull();
+    await request(app).post("/api/sitters/me/availability/archive").set("Authorization", f.sitter.auth).send({ slotIds: [own.id] });
+    await prisma.account.update({ where: { id: f.sitter.id }, data: { emailVerifiedAt: null } });
+    expect((await request(app).post("/api/sitters/me/availability/restore").set("Authorization", f.sitter.auth).send({ slotIds: [own.id] })).status).toBe(403);
+  });
+
+  it("protects reservations during a bulk archive and rolls back every selected slot", async () => {
+    const f = await fixture();
+    const slots = (await f.batch([f.interval(0, 180), f.interval(240, 300)])).body.slots;
+    expect((await request(app).post("/api/bookings").set("Authorization", f.owner.auth).send({
+      petId: f.pet.id, sitterServiceId: f.profile.services[0].id, availabilitySlotId: slots[0].id, startsAt: f.interval(30, 60).startsAt
+    })).status).toBe(201);
+    const result = await request(app).post("/api/sitters/me/availability/archive").set("Authorization", f.sitter.auth).send({ slotIds: slots.map((slot: { id: string }) => slot.id) });
+    expect(result.status).toBe(409); expect(result.body.error).toBe("SLOT_HAS_BOOKINGS");
+    expect(await prisma.availabilitySlot.count({ where: { sitterProfileId: f.profile.id, archivedAt: null } })).toBe(2);
+  });
+
+  it("refuses undo after a conflicting new interval without partially restoring other days", async () => {
+    const f = await fixture();
+    const slots = (await f.batch([f.interval(0, 60), f.interval(90, 180)])).body.slots;
+    const slotIds = slots.map((slot: { id: string }) => slot.id);
+    await request(app).post("/api/sitters/me/availability/archive").set("Authorization", f.sitter.auth).send({ slotIds });
+    expect((await f.batch([f.interval(90, 150)])).status).toBe(201);
+    const undo = await request(app).post("/api/sitters/me/availability/restore").set("Authorization", f.sitter.auth).send({ slotIds });
+    expect(undo.status).toBe(409); expect(undo.body.error).toBe("AVAILABILITY_OVERLAP");
+    expect(await prisma.availabilitySlot.count({ where: { id: { in: slotIds }, archivedAt: null } })).toBe(0);
+  });
+
+  it("serializes a booking against bulk removal, never archiving an active reservation", async () => {
+    const f = await fixture();
+    const slots = (await f.batch([f.interval(0, 180), f.interval(240, 300)])).body.slots;
+    const [removed, booked] = await Promise.all([
+      request(app).post("/api/sitters/me/availability/archive").set("Authorization", f.sitter.auth).send({ slotIds: slots.map((slot: { id: string }) => slot.id) }),
+      request(app).post("/api/bookings").set("Authorization", f.owner.auth).send({ petId: f.pet.id, sitterServiceId: f.profile.services[0].id, availabilitySlotId: slots[0].id, startsAt: f.interval(30, 60).startsAt })
+    ]);
+    expect([200, 409]).toContain(removed.status); expect([201, 409]).toContain(booked.status);
+    expect(removed.status === 200 && booked.status === 201).toBe(false);
+    expect(await prisma.availabilitySlot.count({ where: { sitterProfileId: f.profile.id, archivedAt: null } })).toBe(removed.status === 200 ? 0 : 2);
+  });
+
+  it("atomically saves 28 days with five breaks, preserves all intervals and rejects booking across a break", async () => {
+    const { batch, interval, publicUrl, sitter, owner, pet, profile } = await fixture();
+    const periods = [[0, 60], [75, 120], [135, 180], [195, 240], [255, 300], [315, 480]];
+    const inputs = Array.from({ length: 28 }, (_, day) => periods.map(([from, to]) => interval(day * 1440 + from, day * 1440 + to))).flat();
+    const response = await batch(inputs);
+    expect(response.status).toBe(201); expect(response.body.slots).toHaveLength(168);
+    const publicPage = await request(app).get(`${publicUrl}&limit=200`);
+    expect(publicPage.body.availability).toHaveLength(168);
+    const mine = await request(app).get("/api/sitters/me/schedule").set("Authorization", sitter.auth)
+      .query({ from: interval(0, 1).startsAt, to: interval(28 * 1440, 28 * 1440 + 1).startsAt, limit: 200 });
+    expect(mine.body.slots).toHaveLength(168);
+    const reserve = (from: number) => request(app).post("/api/bookings").set("Authorization", owner.auth).send({
+      petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: response.body.slots[0].id, startsAt: interval(from, from + 30).startsAt
+    });
+    expect((await reserve(45)).status).toBe(409);
+    expect((await reserve(60)).status).toBe(409);
+    expect((await reserve(30)).status).toBe(201);
+  });
+
   it("saves multiple days and split working hours with a break", async () => {
     const { batch, interval, publicUrl } = await fixture();
     const created = await batch([interval(0, 180), interval(240, 480), interval(1440, 1620), interval(1680, 1920)]);
@@ -52,7 +137,7 @@ describe("calendar schedule", () => {
 
   it("validates empty, oversized, past and internally overlapping batches and requires verified authentication", async () => {
     const { batch, interval, sitter } = await fixture();
-    for (const slots of [[], Array.from({ length: 57 }, (_, n) => interval(n * 60, n * 60 + 30)), [interval(0, 60), interval(30, 90)], [interval(-4000, -3900)]]) {
+    for (const slots of [[], Array.from({ length: 169 }, (_, n) => interval(n * 60, n * 60 + 30)), [interval(0, 60), interval(30, 90)], [interval(-4000, -3900)]]) {
       expect((await batch(slots)).status).toBe(400);
     }
     expect((await request(app).post("/api/sitters/me/availability/batch").send({ slots: [interval(0, 60)] })).status).toBe(401);

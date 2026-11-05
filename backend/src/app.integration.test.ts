@@ -100,7 +100,7 @@ describe("API integration", () => {
   it("supports the minimal clinic profile API", async () => {
     const clinic = await request(app).post("/api/auth/register/clinic").send({
       clinicName: "Pupply Vet",
-      nip: "1234567890",
+      nip: "1234563218",
       email: "clinic@example.com",
       phone: "+48111111111",
       password,

@@ -11,15 +11,15 @@ import { uploadSitterPhoto } from "@/shared/api/uploads-service";
 import { AvailabilitySlot, SitterServiceType } from "@/features/marketplace/types/marketplace";
 import { calendarWindow, dateKey } from "@/features/scheduling/calendar-utils";
 import { AvailabilityCalendar } from "@/features/scheduling/AvailabilityCalendar";
+import { SERVICE_LABELS as serviceLabels, SERVICE_DESCRIPTIONS as serviceDescriptions } from "@/features/marketplace/services/service-catalog";
 
-const serviceLabels: Record<SitterServiceType, string> = { DOG_WALK: "Spacer", DROP_IN: "Wizyta domowa", DAY_CARE: "Opieka dzienna" };
-const serviceDescriptions: Record<SitterServiceType, string> = { DOG_WALK: "Spacer ze zwierzakiem w okolicy.", DROP_IN: "Wizyta u właściciela: karmienie, zabawa i opieka.", DAY_CARE: "Opieka nad zwierzakiem przez część dnia." };
 type Offer = { key: string; type: SitterServiceType; duration: string; price: string };
 let nextOffer = 0;
 const newOffer = (type: SitterServiceType): Offer => ({ key: `new-${++nextOffer}`, type, duration: type === "DAY_CARE" ? "480" : "30", price: "" });
 
 export default function SitterProfileScreen() {
   const [exists, setExists] = useState(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
   const [bio, setBio] = useState("");
   const [location, setLocation] = useState<CareLocation | null>(null);
   const [radius, setRadius] = useState(10);
@@ -43,7 +43,7 @@ export default function SitterProfileScreen() {
         const { profile } = await getMySitterProfile();
         const { slots } = await getMySchedule(calendarWindow(dateKey(new Date()).slice(0, 7)));
         if (!mounted) return;
-        setExists(true); setBio(profile.bio); setRadius(profile.serviceRadiusKm); setAvailability(slots); setIsActive(profile.isActive);
+        setExists(true); setProfileId(profile.id); setBio(profile.bio); setRadius(profile.serviceRadiusKm); setAvailability(slots); setIsActive(profile.isActive);
         setLocation({ id: profile.id, city: profile.city, region: profile.region || "", county: "", latitude: profile.latitude, longitude: profile.longitude });
         setPhotoKey(profile.photoKey); setPhotoUrl(profile.photoUrl);
         setOffers(profile.services.filter(item => item.isActive).map(service => ({ key: service.id, type: service.type, duration: String(service.durationMinutes), price: (service.priceCents / 100).toFixed(2).replace(".", ",") })));
@@ -76,7 +76,7 @@ export default function SitterProfileScreen() {
       if (pendingPhoto) { savedPhotoKey = await uploadSitterPhoto(pendingPhoto, "image/jpeg"); setPhotoKey(savedPhotoKey); setPhotoUrl(pendingPhoto); setPendingPhoto(null); }
       const payload = { bio: bio.trim(), city: location.city, region: location.region || null, latitude: location.latitude, longitude: location.longitude, serviceRadiusKm: radius, isActive, photoKey: savedPhotoKey, services };
       const response = exists ? await updateSitterProfile(payload) : await createSitterProfile(payload);
-      setExists(true); if (!exists) setAvailability(response.profile.availability); setPhotoKey(response.profile.photoKey); setPhotoUrl(response.profile.photoUrl);
+      setExists(true); setProfileId(response.profile.id); if (!exists) setAvailability(response.profile.availability); setPhotoKey(response.profile.photoKey); setPhotoUrl(response.profile.photoUrl);
       setOffers(response.profile.services.filter(item => item.isActive).map(service => ({ key: service.id, type: service.type, duration: String(service.durationMinutes), price: (service.priceCents / 100).toFixed(2).replace(".", ",") })));
       setSuccess(isActive ? "Profil zapisany. Dodaj wolne terminy, aby właściciele mogli rezerwować Twoje usługi." : "Profil zapisany. Oferta jest wstrzymana i nie pojawia się w wyszukiwaniu.");
     } catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : "Nie udało się zapisać profilu. Sprawdź połączenie i spróbuj ponownie."); }
@@ -122,6 +122,7 @@ export default function SitterProfileScreen() {
       {error ? <Text style={styles.statusError} accessibilityRole="alert">{error}</Text> : null}{success ? <Text style={styles.statusSuccess} accessibilityRole="alert">{success}</Text> : null}
       <TouchableOpacity style={[styles.primaryButton, (isSaving || scheduleBusy) && styles.buttonDisabled]} disabled={isSaving || scheduleBusy} onPress={save} accessibilityRole="button">{isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>{exists ? "Zapisz zmiany" : "Zapisz profil opiekuna"}</Text>}</TouchableOpacity>
       <Text style={[styles.muted, { marginTop: 8, marginBottom: 20 }]}>Zdjęcie, opis, usługi i widoczność zostaną zapisane po kliknięciu przycisku.</Text>
+      {profileId ? <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={() => router.push({ pathname: "/marketplace/reviews", params: { sitterId: profileId } })}><Text style={styles.secondaryButtonText}>Zobacz moje opinie</Text></TouchableOpacity> : null}
       {exists ? <AvailabilityCalendar title="4. Twój grafik" slots={availability} onChange={setAvailability} disabled={isSaving} onBusyChange={setScheduleBusy} /> : <View style={styles.card}><Text style={styles.cardTitle}>4. Twój grafik</Text><Text style={styles.body}>Najpierw zapisz profil. Następnie wybierz dni w kalendarzu i ustaw godziny dostępności.</Text></View>}
     </ScrollView>
   );

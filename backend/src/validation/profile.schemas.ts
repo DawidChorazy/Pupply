@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { nipSchema } from "./clinic.schemas";
 
 const phoneSchema = z
   .string()
@@ -15,13 +16,17 @@ export const updateUserProfileSchema = z
   .object({
     fullName: z.string().trim().min(2).max(120).optional(),
     phone: phoneSchema.optional(),
-    birthDate: birthDateSchema.nullable().optional()
+    birthDate: birthDateSchema.nullable().optional(),
+    photoKey: z.string().trim().min(1).max(500).nullable().optional()
   })
   .refine((data) => Object.keys(data).length > 0, "Update payload is empty");
 
 export const updateClinicProfileSchema = z
   .object({
     clinicName: z.string().trim().min(2).max(120).optional(),
-    phone: phoneSchema.optional()
-  })
+    phone: phoneSchema.optional(),
+    nip: nipSchema.optional(),
+    address: z.string().trim().min(5).max(500).optional(),
+    registrationNumber: z.string().trim().min(1).max(100).optional()
+  }).strict()
   .refine((data) => Object.keys(data).length > 0, "Update payload is empty");

@@ -1,4 +1,4 @@
-import { AccountRole, AccountTokenType, Prisma } from "@prisma/client";
+import { AccountRole, AccountTokenType, ClinicVerificationStatus, Prisma } from "@prisma/client";
 import { OAuth2Client } from "google-auth-library";
 
 import { env } from "../config/env";
@@ -6,6 +6,7 @@ import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { assertMailAvailable, sendAccountActionEmail } from "./mail.service";
+import { nipSchema } from "../validation/clinic.schemas";
 import {
   createOpaqueToken,
   createRefreshTokenId,
@@ -60,6 +61,7 @@ type AccountWithProfiles = {
     clinicName: string;
     nip: string;
     phone: string;
+    verificationStatus: ClinicVerificationStatus;
   } | null;
 };
 
@@ -86,7 +88,8 @@ function mapAccount(account: AccountWithProfiles) {
               id: account.clinicProfile.id,
               clinicName: account.clinicProfile.clinicName,
               nip: account.clinicProfile.nip,
-              phone: account.clinicProfile.phone
+              phone: account.clinicProfile.phone,
+              verificationStatus: account.clinicProfile.verificationStatus
             }
           : null
   };
@@ -163,6 +166,7 @@ export async function registerUser(input: RegisterUserInput) {
 }
 
 export async function registerClinic(input: RegisterClinicInput) {
+  input = { ...input, nip: nipSchema.parse(input.nip) };
   const existingEmail = await prisma.account.findUnique({
     where: {
       email: input.email

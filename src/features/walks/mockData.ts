@@ -51,7 +51,7 @@ export const caregivers: Caregiver[] = [
   {
     id: "care-3",
     name: "Kasia Zielińska",
-    role: "Opieka dzienna",
+    role: "Opieka u opiekuna",
     rating: "5.0",
     distance: "3.1 km",
     priceLabel: "od 55 zł",

@@ -8,6 +8,8 @@ import { AppError } from "../utils/app-error";
 import { passwordSchema } from "../validation/auth.schemas";
 import { changePassword, requestEmailChange, setAccountState } from "../services/account.service";
 import { requireVerifiedEmail } from "../services/account-access.service";
+import { getClinicVerificationForAdmin, listClinicVerifications, reviewClinicVerification } from "../services/clinic-verification.service";
+import { listClinicVerificationsSchema, reviewClinicVerificationSchema } from "../validation/clinic.schemas";
 
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
@@ -38,6 +40,17 @@ accountRouter.patch("/preferences", asyncHandler(async (req, res) => {
 export const adminRouter = Router();
 adminRouter.use(requireAuth);
 adminRouter.use((req, _res, next) => next(req.auth?.role === "ADMIN" ? undefined : new AppError(403, "Administrator access required", "FORBIDDEN")));
+adminRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+adminRouter.get("/clinics", asyncHandler(async (req, res) => {
+  res.json(await listClinicVerifications(listClinicVerificationsSchema.parse(req.query)));
+}));
+adminRouter.get("/clinics/:accountId/verification", asyncHandler(async (req, res) => {
+  res.json({ profile: await getClinicVerificationForAdmin(String(req.params.accountId)) });
+}));
+adminRouter.post("/clinics/:accountId/verification", asyncHandler(async (req, res) => {
+  const input = reviewClinicVerificationSchema.parse(req.body);
+  res.json({ verification: await reviewClinicVerification(req.auth!.accountId, String(req.params.accountId), input) });
+}));
 adminRouter.post("/accounts/:accountId/state", asyncHandler(async (req, res) => {
   const input = z.object({ action: z.enum(["BLOCK", "RESTORE"]), reason: z.string().trim().min(3).max(500) }).parse(req.body);
   await setAccountState(req.auth!.accountId, String(req.params.accountId), input.action, input.reason);

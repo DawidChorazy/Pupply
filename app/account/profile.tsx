@@ -2,7 +2,6 @@ import { BottomMenu } from "@/shared/navigation/BottomMenu";
 import { DogsCard } from "@/features/pets/components/DogsCard";
 import { usePetsList } from "@/features/pets/hooks/usePetsList";
 import { SitterPhotoPicker } from "@/features/marketplace/components/SitterPhotoPicker";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PrimaryButton, SecondaryButton } from "../components/Buttons";
@@ -32,6 +31,7 @@ import {
 } from "@/shared/session/session-events";
 import { ProfileResponse } from "@/features/auth/types/auth";
 import { validateProfileForm } from "@/features/profile/utils/validation";
+import { uploadProfilePhoto } from "@/shared/api/uploads-service";
 
 type Profile = ProfileResponse["profile"];
 const toForm = (profile: Profile) => ({
@@ -60,6 +60,10 @@ export default function ProfileScreen() {
   const [leaving, setLeaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const [photoSuccess, setPhotoSuccess] = useState("");
+  const photoRequest = useRef<AbortController | null>(null);
   const request = useRef(0);
   const mounted = useRef(true);
   const busy = useRef(false);
@@ -79,12 +83,15 @@ export default function ProfileScreen() {
       request.current += 1;
       setAuthenticated(false);
       setProfile(null);
+      photoRequest.current?.abort();
+      setPhotoUri(null); setPhotoError(""); setPhotoSuccess(""); setPhotoSaving(false);
       setForm({ fullName: "", phone: "", birthDate: "" });
       setEditing(false);
       router.replace("/");
     });
     return () => {
       mounted.current = false;
+      photoRequest.current?.abort();
       unsubscribe();
     };
   }, []);
@@ -94,6 +101,7 @@ export default function ProfileScreen() {
   }, [authRequired, leave]);
 
   const load = useCallback(async () => {
+    if (busy.current) return;
     const id = ++request.current;
     setLoading(true);
     setError("");
@@ -108,6 +116,7 @@ export default function ProfileScreen() {
       const response = await getMyProfile(token);
       if (!active() || id !== request.current) return;
       setProfile(response.profile);
+      setPhotoUri(response.profile.photoUrl ?? null);
     } catch (err) {
       if (!active() || id !== request.current) return;
       if (err instanceof ApiError && err.status === 401) {
@@ -131,6 +140,32 @@ export default function ProfileScreen() {
       };
     }, [load])
   );
+
+  const savePhoto = async (uri: string | null) => {
+    if (busy.current || !profile || !active()) return;
+    busy.current = true; setPhotoSaving(true); setPhotoError(""); setPhotoSuccess("");
+    request.current += 1;
+    setPhotoUri(uri);
+    const controller = new AbortController(); photoRequest.current = controller;
+    const timer = setTimeout(() => controller.abort(), 30000);
+    try {
+      const photoKey = uri ? await uploadProfilePhoto(uri, controller.signal) : null;
+      if (!active()) return;
+      const response = await updateMyProfile({ photoKey }, controller.signal);
+      if (!active()) return;
+      setProfile(response.profile); setPhotoUri(response.profile.photoUrl ?? null);
+      setPhotoSuccess(uri ? "Zapisano zdjęcie profilowe." : "Usunięto zdjęcie profilowe.");
+    } catch (err) {
+      if (!active()) return;
+      if (err instanceof ApiError && err.status === 401) { await leave(); return; }
+      setPhotoUri(profile.photoUrl ?? null);
+      setPhotoError(controller.signal.aborted ? "Zapis zdjęcia trwał zbyt długo. Spróbuj ponownie."
+        : err instanceof ApiError ? err.message : "Nie udało się zapisać zdjęcia. Spróbuj ponownie.");
+    } finally {
+      clearTimeout(timer); photoRequest.current = null; busy.current = false;
+      if (active()) setPhotoSaving(false);
+    }
+  };
 
   const save = async () => {
     if (busy.current || !profile) return;
@@ -207,7 +242,7 @@ export default function ProfileScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => void refresh()}
-              enabled={!saving && !leaving}
+              enabled={!saving && !photoSaving && !leaving}
             />
           }
         >
@@ -221,8 +256,12 @@ export default function ProfileScreen() {
               <Text style={styles.subtitle}>
                 Twoje konto i pupile w jednym miejscu.
               </Text>
-              <SitterPhotoPicker uri={photoUri} disabled={saving} onSelected={setPhotoUri} onRemove={() => setPhotoUri(null)} onError={setSaveError}>
-              </SitterPhotoPicker>
+              <SitterPhotoPicker uri={photoUri} disabled={!profile || loading || saving || photoSaving || leaving}
+                label="Wybierz zdjęcie profilowe" hint="Zdjęcie profilowe jest publiczne. Po wybraniu zapisze się automatycznie i będzie widoczne również w czacie."
+                onSelected={savePhoto} onRemove={() => savePhoto(null)} onError={message => { setPhotoError(message); setPhotoSuccess(""); }} />
+              {photoSaving ? <Text style={styles.subtitle} accessibilityLiveRegion="polite">Zapisywanie zdjęcia…</Text> : null}
+              {photoError ? <Text style={styles.error} accessibilityRole="alert">{photoError}</Text> : null}
+              {photoSuccess ? <Text style={styles.success} accessibilityLiveRegion="polite">{photoSuccess}</Text> : null}
             </View>
           </View>
           <View style={styles.card}>
@@ -236,7 +275,7 @@ export default function ProfileScreen() {
             {error ? (
               <View>
                 <Text style={styles.error}>{error}</Text>
-                <PrimaryButton children="Spróbuj ponownie" accessibilityRole="button" onPress={() => void load()}/>
+                <PrimaryButton accessibilityRole="button" onPress={() => void load()}>Spróbuj ponownie</PrimaryButton>
                 {/* <TouchableOpacity
                   onPress={() => void load()}
                   accessibilityRole="button"
@@ -271,7 +310,7 @@ export default function ProfileScreen() {
                           accessibilityLabel={label}
                           style={styles.input}
                           value={form[key]}
-                          editable={!saving}
+                          editable={!saving && !photoSaving}
                           onChangeText={(value) =>
                             setForm((current) => ({ ...current, [key]: value }))
                           }
@@ -291,7 +330,7 @@ export default function ProfileScreen() {
                       <TouchableOpacity
                         style={styles.button}
                         onPress={() => void save()}
-                        disabled={saving}
+                        disabled={saving || photoSaving}
                         accessibilityRole="button"
                       >
                         {saving ? (
@@ -301,13 +340,13 @@ export default function ProfileScreen() {
                         )}
                       </TouchableOpacity>
 
-                      <SecondaryButton children="Anuluj" style={styles.link} disabled={saving}
+                      <SecondaryButton style={styles.link} disabled={saving || photoSaving}
                         onPress={() => {
                           setEditing(false);
                           setForm(toForm(profile));
                           setSaveError("");
                         }}
-                        accessibilityRole="button"/>
+                        accessibilityRole="button">Anuluj</SecondaryButton>
                       {/* <TouchableOpacity
                         style={styles.secondaryButton}
                         disabled={saving}
@@ -391,7 +430,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => void signOut()}
-            disabled={saving || leaving}
+            disabled={saving || photoSaving || leaving}
             accessibilityRole="button"
           >
             {leaving ? (

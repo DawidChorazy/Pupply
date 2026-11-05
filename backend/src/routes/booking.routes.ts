@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { rateLimit } from "express-rate-limit";
+import { createReview } from "../services/review.service";
+import { createReviewSchema } from "../validation/review.schemas";
 
 import { requireAuth } from "../middleware/require-auth";
 import { createBooking, createBookings, getBooking, getBookingOperation, listBookings, updateBookingStatus } from "../services/booking.service";
@@ -8,6 +11,13 @@ import { bookingOperationKeySchema, createBookingSchema, createBookingsSchema, l
 
 const bookingRouter = Router();
 bookingRouter.use(requireAuth);
+bookingRouter.post("/:bookingId/review", rateLimit({ windowMs: 60_000, limit: 10,
+  keyGenerator: req => req.auth!.accountId, standardHeaders: "draft-8", legacyHeaders: false,
+  handler: (req, res) => { res.status(429).json({ error: "RATE_LIMITED", message: "Zbyt wiele prób publikacji opinii. Spróbuj za chwilę.", requestId: req.requestId }); }
+}), asyncHandler(async (req, res) => {
+  const review = await createReview(req.auth!.accountId, req.auth!.role, String(req.params.bookingId), createReviewSchema.parse(req.body));
+  res.status(201).json({ review });
+}));
 
 bookingRouter.post("/", asyncHandler(async (req, res) => {
   if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
