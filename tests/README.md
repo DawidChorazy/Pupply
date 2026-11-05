@@ -1,4 +1,20 @@
-# Profile regression checks
+# Regression checks
+
+## Calendar and booking schedule
+
+`node tests/scheduling.test.cjs` checks local calendar dates, daylight-saving changes, repeat schedules, breaks, elapsed time and service duration. With the temporary Playwright installation described below and Expo running:
+
+```sh
+NODE_PATH=/tmp/pupply-browser/node_modules PLAYWRIGHT_BROWSERS_PATH=/tmp/pupply-browser/browsers node tests/scheduling-browser.cjs
+```
+
+The browser check uses HTTP fixtures. It checks protected reservations, choosing hours without typing, repeating work days with a break, failed saves/retry, overlaps, persistence after reload, mobile/desktop layouts, sending an exact booking time, selecting multiple dates, proportional prices, extended visits, common availability across days and refreshing after single/batch booking conflicts, monthly loading, removing availability after cancellation, replaying a lost response and recovering a committed booking after page reload. Screenshots are saved as `/tmp/pupply-calendar-mobile.png`, `/tmp/pupply-calendar-desktop.png` `/tmp/pupply-booking-calendar-mobile.png` and `/tmp/pupply-multiday-booking-mobile.png`.
+
+`backend/src/services/schedule.integration.test.ts` uses a separate test database and covers atomic batch saves/rollback, simultaneous submissions, permissions, private reservation data, free intervals, editing hours, preserving booking history, a concurrent booking versus schedule change, longer appointments, server price calculation, stale quotes and atomic multi-day reservations. Run it alongside the booking scenarios in `reliability.integration.test.ts`; the latter's PDF scenarios also require configured test storage.
+
+`backend/src/services/booking-reliability.integration.test.ts` covers the review regressions: 10 pairs of concurrent non-overlapping bookings, concurrent idempotent retries, original-response replay, account isolation, atomic batch rollback, cancelling/archiving availability without deleting history, read-only handling of expired requests, targeted expiry during writes, bounded date ranges and cursor pagination. Apply migration `20261019220000_schedule_reliability` to the separate test database first.
+
+## Profile
 
 Run validation, session isolation and API response tests without extra dependencies:
 

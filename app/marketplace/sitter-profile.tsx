@@ -1,18 +1,16 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Switch, Text, TextInput, Touchable, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { CareLocationPicker } from "@/features/marketplace/components/CareLocationPicker";
 import { SitterPhotoPicker } from "@/features/marketplace/components/SitterPhotoPicker";
 import { ApiError } from "@/shared/api/api-client";
 import { CareLocation } from "@/features/marketplace/services/location-service";
-import { addAvailability, createSitterProfile, deleteAvailability, getMySitterProfile, updateSitterProfile } from "@/features/marketplace/services/sitters-service";
+import { createSitterProfile, getMySchedule, getMySitterProfile, updateSitterProfile } from "@/features/marketplace/services/sitters-service";
 import { uploadSitterPhoto } from "@/shared/api/uploads-service";
 import { AvailabilitySlot, SitterServiceType } from "@/features/marketplace/types/marketplace";
-
-import { formatPolishDateTimeInput, polishDateTimeToIso } from "@/shared/utils/input-masks";
-import { Calendar } from "react-native-calendars"
-import type { WorkingHours } from "@/features/marketplace/types/sitter-profile";
+import { calendarWindow, dateKey } from "@/features/scheduling/calendar-utils";
+import { AvailabilityCalendar } from "@/features/scheduling/AvailabilityCalendar";
 
 const serviceLabels: Record<SitterServiceType, string> = { DOG_WALK: "Spacer", DROP_IN: "Wizyta domowa", DAY_CARE: "Opieka dzienna" };
 const serviceDescriptions: Record<SitterServiceType, string> = { DOG_WALK: "Spacer ze zwierzakiem w okolicy.", DROP_IN: "Wizyta u właściciela: karmienie, zabawa i opieka.", DAY_CARE: "Opieka nad zwierzakiem przez część dnia." };
@@ -32,27 +30,20 @@ export default function SitterProfileScreen() {
   const [isActive, setIsActive] = useState(true);
   const [preview, setPreview] = useState(false);
   const [availability, setAvailability] = useState<AvailabilitySlot[]>([]);
-  const [startsAt, setStartsAt] = useState("");
-  const [endsAt, setEndsAt] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [slotBusy, setSlotBusy] = useState(false);
+  const [scheduleBusy, setScheduleBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [defaultHours, setDefaultHours] = useState<WorkingHours>({from: "08:00", to: "16:00"})
-  const [hoursToApply, setHoursToApply] = useState<WorkingHours>({from: "08:00", to: "16:00"})
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [customHours, setCustomHours] = useState<Record<string, WorkingHours>>({});
-  const [editingHours, setEditingHours] = useState(false)
-  const [daysToEdit, setDaysToEdit] = useState<string[]>([]);
 
   useEffect(() => {
     let mounted = true;
     void (async () => {
       try {
         const { profile } = await getMySitterProfile();
+        const { slots } = await getMySchedule(calendarWindow(dateKey(new Date()).slice(0, 7)));
         if (!mounted) return;
-        setExists(true); setBio(profile.bio); setRadius(profile.serviceRadiusKm); setAvailability(profile.availability); setIsActive(profile.isActive);
+        setExists(true); setBio(profile.bio); setRadius(profile.serviceRadiusKm); setAvailability(slots); setIsActive(profile.isActive);
         setLocation({ id: profile.id, city: profile.city, region: profile.region || "", county: "", latitude: profile.latitude, longitude: profile.longitude });
         setPhotoKey(profile.photoKey); setPhotoUrl(profile.photoUrl);
         setOffers(profile.services.filter(item => item.isActive).map(service => ({ key: service.id, type: service.type, duration: String(service.durationMinutes), price: (service.priceCents / 100).toFixed(2).replace(".", ",") })));
@@ -63,38 +54,10 @@ export default function SitterProfileScreen() {
     return () => { mounted = false; };
   }, []);
 
-  const changeWorkingHours = () => {
-    setDaysToEdit([]);
-    setEditingHours(current => !current);
-  }
-
-  const saveWorkingHours = () => {
-    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
-    if (
-      !timePattern.test(hoursToApply.from) ||
-      !timePattern.test(hoursToApply.to)
-    ) {
-      setError("Podaj godziny w formacie HH:MM, od 00:00 do 23:59.");
-      return;
-    }
-    if (hoursToApply.from >= hoursToApply.to) {setError("Godzina końcowa musi być późniejsza od początkowej"); return;}
-    setCustomHours(current => {
-      const updated = {...current};
-      for(const date of daysToEdit){
-        updated[date] = {...hoursToApply}
-      }
-      return updated;
-
-    })
-      setError("");
-      setDaysToEdit([]);
-      setEditingHours(false);
-  }
-
   const changed = () => { setSuccess(""); setError(""); };
   const updateOffer = (key: string, changes: Partial<Offer>) => { changed(); setOffers(current => current.map(offer => offer.key === key ? { ...offer, ...changes } : offer)); };
   const save = async () => {
-    if (isSaving) return;
+    if (isSaving || scheduleBusy) return;
     setError(""); setSuccess("");
     if (bio.trim().length < 20) { setError("Napisz kilka słów o sobie — opis musi mieć co najmniej 20 znaków."); return; }
     if (!location) { setError("Wybierz miejscowość z podpowiedzi lub użyj swojej lokalizacji."); return; }
@@ -113,36 +76,18 @@ export default function SitterProfileScreen() {
       if (pendingPhoto) { savedPhotoKey = await uploadSitterPhoto(pendingPhoto, "image/jpeg"); setPhotoKey(savedPhotoKey); setPhotoUrl(pendingPhoto); setPendingPhoto(null); }
       const payload = { bio: bio.trim(), city: location.city, region: location.region || null, latitude: location.latitude, longitude: location.longitude, serviceRadiusKm: radius, isActive, photoKey: savedPhotoKey, services };
       const response = exists ? await updateSitterProfile(payload) : await createSitterProfile(payload);
-      setExists(true); setAvailability(response.profile.availability); setPhotoKey(response.profile.photoKey); setPhotoUrl(response.profile.photoUrl);
+      setExists(true); if (!exists) setAvailability(response.profile.availability); setPhotoKey(response.profile.photoKey); setPhotoUrl(response.profile.photoUrl);
       setOffers(response.profile.services.filter(item => item.isActive).map(service => ({ key: service.id, type: service.type, duration: String(service.durationMinutes), price: (service.priceCents / 100).toFixed(2).replace(".", ",") })));
       setSuccess(isActive ? "Profil zapisany. Dodaj wolne terminy, aby właściciele mogli rezerwować Twoje usługi." : "Profil zapisany. Oferta jest wstrzymana i nie pojawia się w wyszukiwaniu.");
     } catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : "Nie udało się zapisać profilu. Sprawdź połączenie i spróbuj ponownie."); }
     finally { setIsSaving(false); }
-  };
-  const addSlot = async () => {
-    if (slotBusy) return;
-    const start = polishDateTimeToIso(startsAt); const end = polishDateTimeToIso(endsAt);
-    if (!start || !end) { setError("Termin podaj jako DD.MM.RRRR GG:MM"); return; }
-    if (new Date(start) <= new Date()) { setError("Początek terminu musi być w przyszłości."); return; }
-    if (new Date(end) <= new Date(start)) { setError("Koniec terminu musi być później niż początek."); return; }
-    setError(""); setSuccess(""); setSlotBusy(true);
-    try { const response = await addAvailability(start, end); setAvailability(current => [...current, response.slot].sort((a, b) => a.startsAt.localeCompare(b.startsAt))); setStartsAt(""); setEndsAt(""); setSuccess("Dodano wolny termin."); }
-    catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : "Nie udało się dodać terminu."); }
-    finally { setSlotBusy(false); }
-  };
-  const removeSlot = async (slotId: string) => {
-    if (slotBusy) return;
-    setSlotBusy(true); changed();
-    try { await deleteAvailability(slotId); setAvailability(current => current.filter(slot => slot.id !== slotId)); }
-    catch (requestError) { setError(requestError instanceof ApiError ? requestError.message : "Nie udało się usunąć terminu."); }
-    finally { setSlotBusy(false); }
   };
   const imageUri = pendingPhoto || photoUrl;
   if (isLoading) return <View style={[styles.container, styles.center]}><ActivityIndicator color="#D35400" /></View>;
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}><TouchableOpacity style={styles.backButton} onPress={() => router.back()} accessibilityLabel="Wróć"><MaterialCommunityIcons name="arrow-left" size={22} color="#3D2415" /></TouchableOpacity><View style={styles.headerCopy}><Text style={styles.eyebrow}>Dla opiekuna</Text><Text style={styles.title}>{exists ? "Twój profil opiekuna" : "Zostań opiekunem"}</Text><Text style={styles.subtitle}>Przedstaw się, dodaj usługi i ustal własne ceny.</Text></View></View>
-      <View pointerEvents={isSaving ? "none" : "auto"}>
+      <View pointerEvents={isSaving || scheduleBusy ? "none" : "auto"}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>1. Poznajmy Cię</Text>
           <SitterPhotoPicker uri={imageUri} disabled={isSaving} onSelected={uri => { setPendingPhoto(uri); changed(); }} onRemove={() => { setPendingPhoto(null); setPhotoUrl(null); setPhotoKey(null); changed(); }} onError={setError} />
@@ -157,7 +102,7 @@ export default function SitterProfileScreen() {
           {![5, 10, 25, 50].includes(radius) ? <Text style={styles.muted}>Obecny zasięg: {radius} km. Możesz zmienić go powyżej.</Text> : null}
         </View>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>3. Usługi i ceny</Text><Text style={styles.hint}>Dodaj usługi, które chcesz oferować. Cena dotyczy jednej rezerwacji o podanym czasie — nie stawki za godzinę.</Text>
+          <Text style={styles.cardTitle}>3. Usługi i ceny</Text><Text style={styles.hint}>Podaj cenę i minimalny czas usługi. Właściciel może wybrać dłuższą opiekę — cena wzrośnie proporcjonalnie, np. 30 zł za 30 minut to 60 zł za godzinę.</Text>
           {offers.map((offer, index) => <View key={offer.key} style={styles.offer}>
             <View style={styles.spaceBetween}><Text style={styles.offerTitle}>{serviceLabels[offer.type]}</Text><TouchableOpacity onPress={() => { setOffers(current => current.filter(item => item.key !== offer.key)); changed(); }} accessibilityRole="button" accessibilityLabel={`Usuń usługę ${serviceLabels[offer.type]}, oferta ${index + 1}`}><MaterialCommunityIcons name="trash-can-outline" size={22} color="#B42318" /></TouchableOpacity></View>
             <Text style={styles.hint}>{serviceDescriptions[offer.type]}</Text>
@@ -175,68 +120,9 @@ export default function SitterProfileScreen() {
         </View>
       </View>
       {error ? <Text style={styles.statusError} accessibilityRole="alert">{error}</Text> : null}{success ? <Text style={styles.statusSuccess} accessibilityRole="alert">{success}</Text> : null}
-      <TouchableOpacity style={[styles.primaryButton, isSaving && styles.buttonDisabled]} disabled={isSaving} onPress={save} accessibilityRole="button">{isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>{exists ? "Zapisz zmiany" : "Zapisz profil opiekuna"}</Text>}</TouchableOpacity>
+      <TouchableOpacity style={[styles.primaryButton, (isSaving || scheduleBusy) && styles.buttonDisabled]} disabled={isSaving || scheduleBusy} onPress={save} accessibilityRole="button">{isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryButtonText}>{exists ? "Zapisz zmiany" : "Zapisz profil opiekuna"}</Text>}</TouchableOpacity>
       <Text style={[styles.muted, { marginTop: 8, marginBottom: 20 }]}>Zdjęcie, opis, usługi i widoczność zostaną zapisane po kliknięciu przycisku.</Text>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>4. Wolne terminy</Text>
-
-          <Calendar
-          firstDay={1}
-          onDayPress={({dateString}) => {
-            if(editingHours){
-              if(!selectedDays.includes(dateString)) return;
-
-              setDaysToEdit(current =>
-                current.includes(dateString)
-                ? current.filter(date => date !== dateString)
-                : [...current, dateString]
-              )
-            } else{
-              setSelectedDays(current => current.includes(dateString)
-            ? current.filter(date => date !== dateString)
-            : [...current, dateString]);
-            }
-          }}
-          markedDates={Object.fromEntries(
-            selectedDays.map(date => [
-              date,
-              { selected: true, selectedColor: editingHours && daysToEdit.includes(date) ? "#2563EB" : "#D35400" },
-            ])
-          )}
-          >
-
-          </Calendar>
-          <TouchableOpacity onPress={changeWorkingHours}>
-          <Text style={styles.label}>Zmień godziny Pracy</Text>
-          </TouchableOpacity>
-
-          {editingHours && daysToEdit.length > 0 && (
-            <View>
-              <Text>Wybierz dni, którym chcesz zmienić godziny.</Text>
-
-              <Text style={styles.label}>od</Text>
-              <TextInput
-                style={styles.input}
-                value={hoursToApply.from}
-                placeholder={"08:00"}
-                maxLength={5}
-                onChangeText={from => setHoursToApply(current => ({...current, from}))}>
-                </TextInput>
-                <Text style={styles.label}>do</Text>
-                <TextInput
-                style={styles.input}
-                value={hoursToApply.to}
-                placeholder={"16:00"}
-                maxLength={5}
-                onChangeText={to => setHoursToApply(current => ({...current, to}))}>
-              </TextInput>
-              <TouchableOpacity style={styles.primaryButton} onPress={saveWorkingHours}>
-                <Text style={styles.primaryButtonText}>Zastosuj</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-      </View>
+      {exists ? <AvailabilityCalendar title="4. Twój grafik" slots={availability} onChange={setAvailability} disabled={isSaving} onBusyChange={setScheduleBusy} /> : <View style={styles.card}><Text style={styles.cardTitle}>4. Twój grafik</Text><Text style={styles.body}>Najpierw zapisz profil. Następnie wybierz dni w kalendarzu i ustaw godziny dostępności.</Text></View>}
     </ScrollView>
   );
 }

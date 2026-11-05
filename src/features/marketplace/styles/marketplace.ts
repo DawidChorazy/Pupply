@@ -1,0 +1,91 @@
+import { StyleSheet } from "react-native";
+
+export const marketplaceStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#FFF8F0" },
+  content: { padding: 20, paddingBottom: 48 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 20 },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  headerCopy: { flex: 1 },
+  eyebrow: { color: "#D35400", fontSize: 13, fontWeight: "700", marginBottom: 3 },
+  title: { color: "#3D2415", fontSize: 27, fontWeight: "800" },
+  subtitle: { color: "#8A6D5B", fontSize: 13, lineHeight: 18, marginTop: 4 },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F2E4D8",
+    marginBottom: 14
+  },
+  cardTitle: { color: "#3D2415", fontSize: 17, fontWeight: "800", marginBottom: 5 },
+  body: { color: "#6F5648", fontSize: 13, lineHeight: 19 },
+  muted: { color: "#9A7D6A", fontSize: 12, lineHeight: 17 },
+  row: { flexDirection: "row", gap: 10 },
+  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  input: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#FFF8F0",
+    borderWidth: 1,
+    borderColor: "#F1DED0",
+    paddingHorizontal: 14,
+    color: "#3D2415",
+    fontSize: 14,
+    marginBottom: 10
+  },
+  half: { flex: 1 },
+  textArea: { minHeight: 100, paddingTop: 13, textAlignVertical: "top" },
+  label: { color: "#6F5648", fontSize: 12, fontWeight: "700", marginBottom: 8 },
+  chip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E7CBB8",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#FFFFFF"
+  },
+  chipActive: { backgroundColor: "#D35400", borderColor: "#D35400" },
+  chipText: { color: "#7A3B12", fontSize: 12, fontWeight: "700" },
+  chipTextActive: { color: "#FFFFFF" },
+  primaryButton: {
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    marginTop: 6
+  },
+  secondaryButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D35400",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    marginTop: 8
+  },
+  dangerButton: { borderColor: "#B42318" },
+  buttonDisabled: { opacity: 0.55 },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+  secondaryButtonText: { color: "#D35400", fontSize: 13, fontWeight: "800" },
+  dangerButtonText: { color: "#B42318" },
+  statusError: { color: "#B42318", fontSize: 13, textAlign: "center", marginBottom: 10 },
+  statusSuccess: { color: "#067647", fontSize: 13, textAlign: "center", marginBottom: 10 },
+  divider: { height: 1, backgroundColor: "#F2E4D8", marginVertical: 12 },
+  spaceBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  price: { color: "#D35400", fontSize: 15, fontWeight: "800" },
+  badge: { borderRadius: 999, backgroundColor: "#FFF0D2", paddingHorizontal: 9, paddingVertical: 5 },
+  badgeText: { color: "#9A4A10", fontSize: 11, fontWeight: "800" },
+  unreadCard: { borderColor: "#D35400", backgroundColor: "#FFFCF7" },
+  empty: { alignItems: "center", paddingVertical: 24 },
+  center: { alignItems: "center", justifyContent: "center", paddingVertical: 24 }
+});

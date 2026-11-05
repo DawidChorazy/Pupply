@@ -59,11 +59,16 @@ export const API_ENDPOINTS = {
     list: "/sitters",
     me: "/sitters/me",
     availability: "/sitters/me/availability",
+    availabilityBatch: "/sitters/me/availability/batch",
+    schedule: "/sitters/me/schedule",
+    publicAvailability: (profileId: string) => `/sitters/${profileId}/availability`,
     availabilityDetail: (slotId: string) => `/sitters/me/availability/${slotId}`
   },
   bookings: {
     list: "/bookings",
     create: "/bookings",
+    batch: "/bookings/batch",
+    operation: (key: string) => `/bookings/operations/${key}`,
     detail: (bookingId: string) => `/bookings/${bookingId}`,
     status: (bookingId: string) => `/bookings/${bookingId}/status`
   },

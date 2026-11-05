@@ -7,13 +7,11 @@ import { BottomMenu } from "@/shared/navigation/BottomMenu";
 import { usePetsList } from "@/features/pets/hooks/usePetsList";
 import { useWalksList } from "@/features/walks/hooks/useWalksList";
 import { router } from "expo-router";
-import { useState} from "react";
 import { ScrollView, StyleSheet, View, Text, TouchableOpacity } from "react-native";
 
 export default function HomeScreen() {
   const { pets, isLoading, error } = usePetsList();
   const { walks, error: walksError, refreshWalks } = useWalksList();
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const openCaregivers = () => router.push("/marketplace/sitters" as never);
 
   return (
@@ -44,6 +42,10 @@ export default function HomeScreen() {
             onPress={() => router.push("/marketplace/sitter-profile" as never)}
           />
         </View>
+
+        <TouchableOpacity style={styles.scheduleLink} accessibilityRole="button" onPress={() => router.push("/marketplace/schedule" as never)}>
+          <Text style={styles.scheduleTitle}>Mój grafik</Text><Text style={styles.scheduleDescription}>Zarządzaj dostępnością i rezerwacjami →</Text>
+        </TouchableOpacity>
 
         <DogsCard
           pets={pets}
@@ -80,6 +82,9 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 22
   },
+  scheduleLink: { borderWidth: 1, borderColor: "#F1DED0", backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, gap: 4, marginBottom: 18 },
+  scheduleTitle: { color: "#3D2415", fontSize: 16, fontWeight: "800" },
+  scheduleDescription: { color: "#8A6D5B", fontSize: 13 },
   shell: {
     flex: 1,
     backgroundColor: "#FFF8F0"

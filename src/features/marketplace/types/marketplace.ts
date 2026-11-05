@@ -26,6 +26,16 @@ export interface AvailabilitySlot {
   startsAt: string;
   endsAt: string;
   createdAt: string;
+  bookings?: ScheduleBooking[];
+}
+
+export interface ScheduleBooking {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  status: BookingStatus;
+  pet: { name: string };
+  sitterService: { type: SitterServiceType };
 }
 
 export interface SitterProfile {
@@ -119,8 +129,14 @@ export interface CreateBookingPayload {
   sitterServiceId: string;
   availabilitySlotId: string;
   startsAt?: string;
+  durationMinutes?: number;
+  expectedPriceCents?: number;
   note?: string;
 }
+
+export type CreateBookingsPayload = Omit<CreateBookingPayload, "availabilitySlotId" | "startsAt"> & {
+  slots: { availabilitySlotId: string; startsAt: string }[];
+};
 
 export interface ListBookingsParams {
   perspective?: BookingPerspective;
