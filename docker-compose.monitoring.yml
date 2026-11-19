@@ -1,0 +1,22 @@
+services:
+  backend:
+    environment:
+      METRICS_TOKEN: ${METRICS_TOKEN:?Set METRICS_TOKEN to the same value stored in .secrets/metrics-token}
+  prometheus:
+    image: docker.io/prom/prometheus:v3.5.0
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:9090:9090'
+    volumes:
+      - ./ops/prometheus.yml:/etc/prometheus/prometheus.yml:ro,Z
+      - ./ops/alerts.yml:/etc/prometheus/alerts.yml:ro,Z
+      - pupply_prometheus_data:/prometheus
+    secrets:
+      - metrics_token
+    depends_on:
+      - backend
+secrets:
+  metrics_token:
+    file: ./.secrets/metrics-token
+volumes:
+  pupply_prometheus_data:

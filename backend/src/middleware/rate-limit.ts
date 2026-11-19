@@ -1,11 +1,12 @@
-import { rateLimit } from "express-rate-limit";
+import { Options, rateLimit } from "express-rate-limit";
 
 import { env } from "../config/env";
 
-export function createAuthRateLimiter(options: { windowMs?: number; limit?: number } = {}) {
+export function createAuthRateLimiter(options: { windowMs?: number; limit?: number; keyGenerator?: Options["keyGenerator"] } = {}) {
   return rateLimit({
   windowMs: options.windowMs ?? env.AUTH_RATE_LIMIT_WINDOW_MINUTES * 60 * 1000,
   limit: options.limit ?? env.AUTH_RATE_LIMIT_MAX,
+  ...(options.keyGenerator ? { keyGenerator: options.keyGenerator } : {}),
   standardHeaders: "draft-8",
   legacyHeaders: false,
   handler: (req, res) => {

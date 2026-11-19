@@ -7,6 +7,8 @@ declare global {
       auth?: {
         accountId: string;
         role: AccountRole;
+        sessionId?: string;
+        version?: number;
       };
     }
   }

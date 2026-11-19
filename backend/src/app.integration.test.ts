@@ -3,6 +3,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "./app";
 import { prisma } from "./config/prisma";
+import { completePetFixture } from "./test-fixtures";
+import { cleanupOrphanedObjects } from "./services/storage.service";
 
 const password = "Strong@Test1";
 
@@ -15,6 +17,7 @@ async function registerUser(suffix: string) {
     confirmPassword: password
   });
   expect(response.status).toBe(201);
+  await prisma.account.update({ where: { id: response.body.account.id }, data: { emailVerifiedAt: new Date() } });
   return response.body as { accessToken: string; refreshToken: string; account: { id: string } };
 }
 
@@ -77,6 +80,7 @@ describe("API integration", () => {
     expect(updated.status).toBe(200);
     expect(updated.body.profile.fullName).toBe("Updated Owner");
 
+    await prisma.account.update({ where: { id: owner.account.id }, data: { emailVerifiedAt: null } });
     const verification = await request(app)
       .post("/api/auth/email-verification/request")
       .set("Authorization", `Bearer ${owner.accessToken}`);
@@ -98,7 +102,7 @@ describe("API integration", () => {
   it("supports the minimal clinic profile API", async () => {
     const clinic = await request(app).post("/api/auth/register/clinic").send({
       clinicName: "Pupply Vet",
-      nip: "1234567890",
+      nip: "1234563218",
       email: "clinic@example.com",
       phone: "+48111111111",
       password,
@@ -120,6 +124,7 @@ describe("API integration", () => {
       .post("/api/pets")
       .set("Authorization", `Bearer ${owner.accessToken}`)
       .send({ name: "Figa", gender: "FEMALE" });
+    await prisma.pet.update({ where: { id: petResponse.body.pet.id }, data: completePetFixture() });
     const sitterProfile = await request(app)
       .post("/api/sitters/me")
       .set("Authorization", `Bearer ${sitter.accessToken}`)
@@ -132,6 +137,7 @@ describe("API integration", () => {
         services: [{ type: "DOG_WALK", durationMinutes: 60, priceCents: 5000 }]
       });
     expect(sitterProfile.status).toBe(201);
+    await prisma.sitterProfile.update({ where: { accountId: sitter.account.id }, data: { verificationStatus: "VERIFIED" } });
     const serviceId = sitterProfile.body.profile.services[0].id;
     const startsAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const endsAt = new Date(startsAt.getTime() + 90 * 60 * 1000);
@@ -154,7 +160,7 @@ describe("API integration", () => {
 
     const bookingPayload = {
       petId: petResponse.body.pet.id,
-      sitterServiceId: serviceId,
+      pickupAddress: "Warszawa, Testowa 1", sitterServiceId: serviceId,
       availabilitySlotId: slot.body.slot.id
     };
     const booking = await request(app)
@@ -203,6 +209,9 @@ describe("API integration", () => {
     expect(pet.body.pet.photoUrl).toContain(signed.body.photoKey);
     expect((await fetch(pet.body.pet.photoUrl)).status).toBe(200);
     expect((await request(app).delete(`/api/pets/${pet.body.pet.id}`).set("Authorization", `Bearer ${owner.accessToken}`)).status).toBe(204);
+    // Deleting a pet must not delete a photo still referenced by another pet.
+    expect((await fetch(pet.body.pet.photoUrl)).status).toBe(200);
+    await cleanupOrphanedObjects(new Date(Date.now() + 2 * 86_400_000));
     expect((await fetch(pet.body.pet.photoUrl)).status).toBe(404);
   });
 });

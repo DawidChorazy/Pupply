@@ -10,6 +10,26 @@ datasource db {
 enum AccountRole {
   USER
   CLINIC
+  ADMIN
+}
+
+enum ClinicVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum SitterVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum SitterVerificationFilePurpose {
+  IDENTITY_DOCUMENT
+  FACE_PHOTO
 }
 
 enum PetGender {
@@ -29,19 +49,28 @@ enum BookingStatus {
   REJECTED
   CANCELLED
   COMPLETED
+  EXPIRED
 }
 
 enum NotificationType {
+  ISSUE_UPDATED
+  PAYMENT_COMPLETED
+  PAYMENT_REFUNDED
+  WALK_STARTED
+  NEW_MESSAGE
   BOOKING_REQUESTED
   BOOKING_ACCEPTED
   BOOKING_REJECTED
   BOOKING_CANCELLED
   BOOKING_COMPLETED
+  BOOKING_EXPIRED
+  DOCUMENT_EXPIRING
 }
 
 enum AccountTokenType {
   PASSWORD_RESET
   EMAIL_VERIFICATION
+  EMAIL_CHANGE
 }
 
 model Account {
@@ -51,6 +80,10 @@ model Account {
   googleId        String?              @unique
   role            AccountRole
   emailVerifiedAt DateTime?
+  authVersion     Int                  @default(0)
+  deactivatedAt   DateTime?
+  blockedAt       DateTime?
+  emailNotifications Boolean           @default(false)
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   userProfile     UserProfile?
@@ -61,7 +94,16 @@ model Account {
   sitterProfile   SitterProfile?
   ownedBookings   Booking[]            @relation("OwnerBookings")
   sitterBookings  Booking[]            @relation("SitterBookings")
+  questClaims     QuestClaim[]
   notifications   Notification[]
+  pushDevices     PushDevice[]
+  bookingOperations BookingOperation[]
+  firstConversations Conversation[] @relation("FirstParticipant")
+  secondConversations Conversation[] @relation("SecondParticipant")
+  chatMessages ChatMessage[]
+  writtenReviews SitterReview[] @relation("ReviewAuthor")
+  receivedReviews SitterReview[] @relation("ReviewedSitter")
+  walkSessions WalkSession[]
 }
 
 model UserProfile {
@@ -70,6 +112,7 @@ model UserProfile {
   fullName  String
   phone     String
   birthDate DateTime?
+  photoKey  String?
   account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
@@ -79,7 +122,18 @@ model ClinicProfile {
   clinicName String
   nip        String  @unique
   phone      String
+  address    String?
+  registrationNumber String?
+  verificationStatus ClinicVerificationStatus @default(UNVERIFIED)
+  verificationVersion Int @default(0)
+  verificationSubmittedAt DateTime?
+  verificationReviewedAt DateTime?
+  verificationReviewedBy String?
+  verificationReason String?
+  verificationEvidenceUrl String?
   account    Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([verificationStatus, verificationSubmittedAt])
 }
 
 model RefreshToken {
@@ -104,6 +158,7 @@ model AccountActionToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime         @default(now())
+  pendingEmail String?
   account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, type])
@@ -116,6 +171,11 @@ model Pet {
   name      String
   age       Int?
   breed     String?
+  size      PetSize?
+  temperament String?
+  mobilityRestrictions String?
+  careInstructions String?
+  photoKeys String[] @default([])
   weight    Float?
   gender    PetGender
   photoUrl  String?
@@ -129,8 +189,16 @@ model Pet {
   updatedAt DateTime  @updatedAt
   account   Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   bookings  Booking[]
+  documents PetDocument[]
+  shareLinks PetShareLink[]
 
   @@index([accountId])
+}
+
+enum PetSize {
+  SMALL
+  MEDIUM
+  LARGE
 }
 
 model SitterProfile {
@@ -138,10 +206,20 @@ model SitterProfile {
   accountId       String             @unique
   bio             String
   city            String
+  region          String?
+  photoKey        String?
   latitude        Float
   longitude       Float
   serviceRadiusKm Int                @default(10)
   isActive        Boolean            @default(true)
+  verificationStatus SitterVerificationStatus @default(UNVERIFIED)
+  verificationVersion Int @default(0)
+  verificationSubmittedAt DateTime?
+  verificationReviewedAt DateTime?
+  verificationReviewedBy String?
+  verificationReason String?
+  verificationFullName String?
+  verificationFiles SitterVerificationFile[]
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
   account         Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
@@ -149,6 +227,25 @@ model SitterProfile {
   availability    AvailabilitySlot[]
 
   @@index([isActive, city])
+  @@index([verificationStatus, verificationSubmittedAt])
+}
+
+model SitterVerificationFile {
+  id String @id @default(uuid())
+  profileId String
+  purpose SitterVerificationFilePurpose
+  stagingKey String @unique
+  objectKey String @unique
+  contentType String
+  sizeBytes Int
+  uploadedAt DateTime?
+  verificationVersion Int?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  profile SitterProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, verificationVersion, purpose])
+  @@index([expiresAt])
 }
 
 model SitterService {
@@ -173,12 +270,23 @@ model AvailabilitySlot {
   sitterProfileId String
   startsAt        DateTime
   endsAt          DateTime
+  archivedAt      DateTime?
   createdAt       DateTime      @default(now())
   sitterProfile   SitterProfile @relation(fields: [sitterProfileId], references: [id], onDelete: Cascade)
   bookings        Booking[]
 
-  @@unique([sitterProfileId, startsAt, endsAt])
   @@index([sitterProfileId, startsAt])
+}
+
+model BookingOperation {
+  accountId   String
+  key         String
+  requestHash String
+  result      Json?
+  createdAt   DateTime @default(now())
+  account     Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, key])
 }
 
 model Booking {
@@ -189,10 +297,14 @@ model Booking {
   sitterServiceId    String
   availabilitySlotId String
   status             BookingStatus    @default(REQUESTED)
-  activeSlotKey      String?          @unique
+  activeSlotKey      String?
+  startsAt           DateTime
+  endsAt             DateTime
+  expiresAt          DateTime
   priceCents         Int
   currency           String           @default("PLN")
   note               String?
+  pickupAddress      String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   owner              Account          @relation("OwnerBookings", fields: [ownerAccountId], references: [id], onDelete: Cascade)
@@ -201,24 +313,303 @@ model Booking {
   sitterService      SitterService    @relation(fields: [sitterServiceId], references: [id], onDelete: Restrict)
   availabilitySlot   AvailabilitySlot @relation(fields: [availabilitySlotId], references: [id], onDelete: Restrict)
   notifications      Notification[]
+  review             SitterReview?
+  walkSession        WalkSession?
+  paymentRequired    Boolean @default(false)
+  paymentDueAt       DateTime?
+  paidPaymentId      String? @unique
+  cancellationFeeCents Int @default(0)
+  cancelledAt        DateTime?
+  paidPayment        Payment? @relation("PaidBooking", fields: [paidPaymentId], references: [id], onDelete: SetNull)
+  payments           Payment[] @relation("BookingPayments")
+  settlement         PaymentSettlement?
+  issue              BookingIssue?
 
   @@index([ownerAccountId, createdAt])
   @@index([sitterAccountId, createdAt])
   @@index([availabilitySlotId])
+  @@index([status, expiresAt])
+}
+
+enum BookingIssueStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum BookingIssueCategory {
+  NO_SHOW
+  EARLY_FINISH
+  PET_SAFETY
+  OTHER
+}
+
+model BookingIssue {
+  id                String @id @default(cuid())
+  bookingId         String @unique
+  reporterAccountId String
+  category          BookingIssueCategory
+  description       String
+  status            BookingIssueStatus @default(OPEN)
+  version           Int @default(1)
+  resolution        String?
+  reviewedBy        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  booking           Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([reporterAccountId, createdAt])
+}
+
+enum PaymentStatus {
+  CREATING
+  PENDING
+  AUTHORIZED
+  COMPLETED
+  CANCELED
+  FAILED
+}
+
+model Payment {
+  id String @id @default(cuid())
+  bookingId String
+  environment String
+  status PaymentStatus @default(CREATING)
+  activeKey String? @unique
+  amountCents Int
+  currency String @default("PLN")
+  payuOrderId String? @unique
+  checkoutUrl String?
+  customerIp String
+  buyerEmail String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  completedAt DateTime?
+  nextSyncAt DateTime @default(now())
+  leaseUntil DateTime?
+  leaseToken String?
+  attempts Int @default(0)
+  lastErrorCode String?
+  booking Booking @relation("BookingPayments", fields: [bookingId], references: [id], onDelete: Cascade)
+  paidBooking Booking? @relation("PaidBooking")
+  refund PaymentRefund?
+
+  @@index([nextSyncAt])
+  @@index([bookingId, createdAt])
+}
+
+model PaymentRefund {
+  id String @id @default(cuid())
+  paymentId String @unique
+  amountCents Int
+  status String @default("REQUESTED")
+  payuRefundId String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastErrorCode String?
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+model PaymentSettlement {
+  bookingId String @id
+  amountCents Int
+  kind String
+  createdAt DateTime @default(now())
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+}
+
+model WalkSession {
+  id String @id @default(cuid())
+  bookingId String @unique
+  sitterAccountId String
+  startedAt DateTime @default(now())
+  endedAt DateTime?
+  endReason String?
+  distanceMeters Float @default(0)
+  lastSequence Int @default(0)
+  distanceAnchorSequence Int @default(0)
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  sitter Account @relation(fields: [sitterAccountId], references: [id], onDelete: Cascade)
+  points WalkPoint[]
+}
+
+model WalkPoint {
+  sessionId String
+  sequence Int
+  clientPointId String
+  latitude Float
+  longitude Float
+  accuracy Float
+  capturedAt DateTime
+  segmentStart Boolean @default(false)
+  session WalkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, sequence])
+  @@unique([sessionId, clientPointId])
+}
+
+model SitterReview {
+  id String @id @default(cuid())
+  bookingId String @unique
+  authorAccountId String
+  sitterAccountId String
+  punctuality Int
+  communication Int
+  quality Int
+  comment String?
+  createdAt DateTime @default(now())
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author Account @relation("ReviewAuthor", fields: [authorAccountId], references: [id], onDelete: Cascade)
+  sitter Account @relation("ReviewedSitter", fields: [sitterAccountId], references: [id], onDelete: Cascade)
+
+  @@index([sitterAccountId, createdAt, id])
+  @@index([authorAccountId])
+}
+
+model PetDocument {
+  id                 String   @id @default(cuid())
+  petId              String
+  objectKey          String   @unique
+  stagingKey         String? @unique
+  contentType        String @default("application/pdf")
+  purpose            PetDocumentPurpose @default(GENERAL)
+  name               String
+  sizeBytes          Int
+  expiresAt          DateTime?
+  reminderDaysBefore Int      @default(7)
+  reminderSentAt     DateTime?
+  uploadedAt         DateTime?
+  createdAt          DateTime @default(now())
+  pet                Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt, reminderSentAt])
+}
+
+enum PetDocumentPurpose {
+  GENERAL
+  VACCINATION
+}
+
+model PetShareLink {
+  id               String   @id @default(cuid())
+  petId            String
+  tokenHash        String   @unique
+  label            String?
+  includeDocuments Boolean  @default(false)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime @default(now())
+  pet              Pet      @relation(fields: [petId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([petId, createdAt])
+  @@index([expiresAt])
 }
 
 model Notification {
   id        String           @id @default(cuid())
   accountId String
   bookingId String?
+  conversationId String?
+  chatMessageId String? @unique
   type      NotificationType
   title     String
   message   String
   readAt    DateTime?
   createdAt DateTime         @default(now())
+  deliveryEnqueuedAt DateTime?
+  deliveries NotificationDelivery[]
   account   Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   booking   Booking?         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  chatMessage ChatMessage? @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
 
   @@index([accountId, createdAt])
   @@index([accountId, readAt])
+  @@index([conversationId, accountId])
+}
+
+model Conversation {
+  id String @id @default(cuid())
+  firstAccountId String
+  secondAccountId String
+  firstReadSequence Int @default(0)
+  secondReadSequence Int @default(0)
+  lastSequence Int @default(0)
+  createdAt DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+  first Account @relation("FirstParticipant", fields: [firstAccountId], references: [id], onDelete: Cascade)
+  second Account @relation("SecondParticipant", fields: [secondAccountId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+  notifications Notification[]
+
+  @@unique([firstAccountId, secondAccountId])
+  @@index([firstAccountId, lastActivityAt, id])
+  @@index([secondAccountId, lastActivityAt, id])
+}
+
+model ChatMessage {
+  id String @id @default(cuid())
+  conversationId String
+  senderAccountId String
+  clientMessageId String
+  sequence Int
+  text String
+  createdAt DateTime @default(now())
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender Account @relation(fields: [senderAccountId], references: [id], onDelete: Cascade)
+  notification Notification?
+
+  @@unique([conversationId, sequence])
+  @@unique([conversationId, senderAccountId, clientMessageId])
+}
+
+model PushDevice {
+  id        String @id @default(cuid())
+  accountId String
+  token     String @unique
+  sessionId String
+  createdAt DateTime @default(now())
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  @@index([accountId])
+}
+
+model NotificationDelivery {
+  id             String @id @default(cuid())
+  notificationId String
+  channel        String
+  destination    String
+  attempts       Int @default(0)
+  nextAttemptAt  DateTime @default(now())
+  lockedUntil    DateTime?
+  sentAt         DateTime?
+  failedAt       DateTime?
+  ticketId       String?
+  receiptCheckedAt DateTime?
+  createdAt      DateTime @default(now())
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  @@unique([notificationId, channel, destination])
+  @@index([sentAt, failedAt, nextAttemptAt])
+}
+
+model AuditLog {
+  id              String @id @default(cuid())
+  actorAccountId  String
+  targetAccountId String
+  action          String
+  reason          String?
+  createdAt       DateTime @default(now())
+  @@index([targetAccountId, createdAt])
+}
+
+model QuestClaim {
+  id        String   @id @default(cuid())
+  accountId String
+  questId   String
+  points    Int
+  claimedAt DateTime @default(now())
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, questId])
 }

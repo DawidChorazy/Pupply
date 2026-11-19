@@ -1,10 +1,15 @@
-import { AccountRole, Pet, PetGender } from "@prisma/client";
+import { AccountRole, Pet, PetGender, PetSize } from "@prisma/client";
 
 import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
-import { assertPhotoExists, deletePetPhoto, getPetPhotoUrl } from "./storage.service";
+import { assertPhotoExists, getPetPhotoUrl } from "./storage.service";
 
 export interface CreatePetInput {
+  size?: PetSize;
+  temperament?: string;
+  mobilityRestrictions?: string;
+  careInstructions?: string;
+  photoKeys?: string[];
   name: string;
   age?: number;
   breed?: string;
@@ -19,6 +24,11 @@ export interface CreatePetInput {
 }
 
 export interface UpdatePetInput {
+  size?: PetSize;
+  temperament?: string;
+  mobilityRestrictions?: string;
+  careInstructions?: string;
+  photoKeys?: string[];
   name?: string;
   age?: number;
   breed?: string;
@@ -39,16 +49,32 @@ function ensureUserRole(role: AccountRole) {
 }
 
 async function mapPet(pet: Pet) {
+  const proof = await prisma.petDocument.findFirst({ where: { petId: pet.id, purpose: "VACCINATION", uploadedAt: { not: null },
+    OR: [{ expiresAt: null }, { expiresAt: { gte: vaccinationDateCutoff(new Date()) } }] } });
   return {
     ...pet,
+    missingFields: missingPetFields(pet, !!proof),
+    photos: await Promise.all(pet.photoKeys.map(async key => ({ photoKey: key, photoUrl: await getPetPhotoUrl(key) }))),
     photoUrl: pet.photoKey ? await getPetPhotoUrl(pet.photoKey) : pet.photoUrl
   };
+}
+
+export function vaccinationDateCutoff(at: Date) {
+  const parts = new Intl.DateTimeFormat("en", { timeZone: "Europe/Warsaw", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(at);
+  const part = (type: string) => parts.find(value => value.type === type)!.value;
+  return new Date(`${part("year")}-${part("month")}-${part("day")}T00:00:00Z`);
+}
+
+export function missingPetFields(pet: Pick<Pet, "breed" | "size" | "temperament" | "photoKey" | "photoUrl" | "vaccines">, hasVaccinationProof: boolean) {
+  return [!pet.breed?.trim() && "rasa lub typ", !pet.size && "wielkość", !pet.temperament?.trim() && "temperament",
+    !(pet.photoKey || pet.photoUrl) && "zdjęcie główne", !pet.vaccines?.trim() && "informacje o szczepieniach", !hasVaccinationProof && "potwierdzenie szczepień"].filter((value): value is string => !!value);
 }
 
 export async function createPet(accountId: string, role: AccountRole, input: CreatePetInput) {
   ensureUserRole(role);
 
   if (input.photoKey) await assertPhotoExists(accountId, input.photoKey);
+  for (const key of input.photoKeys ?? []) await assertPhotoExists(accountId, key);
 
   const pet = await prisma.pet.create({
     data: {
@@ -110,6 +136,7 @@ export async function updatePet(
   }
 
   if (input.photoKey) await assertPhotoExists(accountId, input.photoKey);
+  for (const key of input.photoKeys ?? []) await assertPhotoExists(accountId, key);
 
   const updatedPet = await prisma.pet.update({
     where: {
@@ -118,9 +145,7 @@ export async function updatePet(
     data: input
   });
 
-  if (input.photoKey && pet.photoKey && input.photoKey !== pet.photoKey) {
-    await deletePetPhoto(pet.photoKey).catch(() => undefined);
-  }
+  // Cleanup checks all pet references; shared photo keys must not be deleted here.
 
   return mapPet(updatedPet);
 }
@@ -136,5 +161,5 @@ export async function deletePet(accountId: string, role: AccountRole, petId: str
     throw new AppError(409, "Pet with booking history cannot be deleted", "PET_HAS_BOOKINGS");
   }
   await prisma.pet.delete({ where: { id: pet.id } });
-  await deletePetPhoto(pet.photoKey).catch(() => undefined);
+  // Unreferenced photos are removed by the storage maintenance job.
 }

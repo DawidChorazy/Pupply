@@ -1,0 +1,1 @@
+export type Medals = "BRONZE" | "SILVER" | "GOLD" | "PLATINUM"

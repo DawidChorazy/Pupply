@@ -15,7 +15,7 @@ export const requestContext: RequestHandler = (req, res, next) => {
         level: res.statusCode >= 500 ? "error" : "info",
         requestId: req.requestId,
         method: req.method,
-        path: req.originalUrl,
+        path: req.path.startsWith("/api/locations") ? req.path : req.originalUrl,
         statusCode: res.statusCode,
         durationMs: Date.now() - startedAt
       };

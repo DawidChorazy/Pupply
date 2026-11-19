@@ -45,3 +45,9 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Local operational data
+backups/
+.secrets/
+backend/.env.test
+/pupply-minio-images.tar

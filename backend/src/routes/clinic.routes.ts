@@ -5,8 +5,17 @@ import { getClinicProfile, updateClinicProfile } from "../services/profile.servi
 import { AppError } from "../utils/app-error";
 import { asyncHandler } from "../utils/async-handler";
 import { updateClinicProfileSchema } from "../validation/profile.schemas";
+import { submitClinicVerificationSchema } from "../validation/clinic.schemas";
+import { submitClinicVerification } from "../services/clinic-verification.service";
+import { createAuthRateLimiter } from "../middleware/rate-limit";
 
 const clinicRouter = Router();
+clinicRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+
+clinicRouter.post("/me/verification", requireAuth, createAuthRateLimiter({ limit: 10, keyGenerator: req => req.auth!.accountId }), asyncHandler(async (req, res) => {
+  const input = submitClinicVerificationSchema.parse(req.body);
+  res.status(202).json({ verification: await submitClinicVerification(req.auth!.accountId, req.auth!.role, input.expectedVersion) });
+}));
 
 clinicRouter.get("/me", requireAuth, asyncHandler(async (req, res) => {
   if (!req.auth) throw new AppError(401, "Authentication context is missing", "AUTH_REQUIRED");
