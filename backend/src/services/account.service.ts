@@ -6,6 +6,8 @@ import { createOpaqueToken, hashToken } from "../utils/tokens";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { assertMailAvailable, sendMail } from "./mail.service";
 import { resetClinicVerification } from "./clinic-verification.service";
+import { invalidateSitterVerification } from "./sitter-verification.service";
+import { schedulePaymentCancellation } from "./payment-state.service";
 
 export async function changePassword(accountId: string, currentPassword: string, password: string) {
   const account = await prisma.account.findUniqueOrThrow({ where: { id: accountId } });
@@ -43,6 +45,7 @@ export async function confirmEmailChange(token: string) {
     const claimed = await tx.accountActionToken.updateMany({ where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } }, data: { usedAt: new Date() } });
     if (!claimed.count) throw new AppError(400, "Link został już użyty", "INVALID_ACTION_TOKEN");
     await tx.account.update({ where: { id: record.accountId }, data: { email: record.pendingEmail, emailVerifiedAt: new Date(), authVersion: { increment: 1 }, googleId: null } });
+    await invalidateSitterVerification(tx, record.accountId, "Zmiana adresu e-mail wymaga ponownej weryfikacji tożsamości.");
     const clinics = await tx.clinicProfile.updateMany({ where: { accountId: record.accountId }, data: resetClinicVerification });
     if (clinics.count) await tx.auditLog.create({ data: { actorAccountId: record.accountId, targetAccountId: record.accountId,
       action: "CLINIC_VERIFICATION_INVALIDATED", reason: "Zmiana adresu e-mail wymaga ponownego potwierdzenia reprezentanta kliniki." } });
@@ -61,6 +64,8 @@ async function cancelActiveBookings(tx: Prisma.TransactionClient, accountId: str
     accountId: booking.ownerAccountId === accountId ? booking.sitterAccountId : booking.ownerAccountId,
     bookingId: booking.id, type: "BOOKING_CANCELLED" as const, title: "Rezerwacja anulowana", message: "Rezerwacja została anulowana z powodu dezaktywacji konta uczestnika."
   })) });
+  if (bookings.length) await tx.walkSession.updateMany({ where: { bookingId: { in: bookings.map(booking => booking.id) }, endedAt: null }, data: { endedAt: new Date(), endReason: "CANCELLED" } });
+  for (const booking of bookings) await schedulePaymentCancellation(tx, await tx.booking.findUniqueOrThrow({ where: { id: booking.id } }));
 }
 
 export async function setAccountState(actorAccountId: string, targetAccountId: string, action: "DEACTIVATE" | "BLOCK" | "RESTORE", reason?: string) {

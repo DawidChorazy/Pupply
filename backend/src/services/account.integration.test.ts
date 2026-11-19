@@ -1,3 +1,4 @@
+import { completePetFixture } from "../test-fixtures";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -46,11 +47,11 @@ describe("account lifecycle", () => {
   });
   it("deactivates an account, hides care offers, cancels bookings and revokes sessions", async () => {
     const account = await user(), owner = await user();
-    const pet = await prisma.pet.create({ data: { accountId: owner.id, name: "Figa", gender: "FEMALE" } });
-    const sitter = await prisma.sitterProfile.create({ data: { accountId: account.id, bio: "Opiekun z doświadczeniem", city: "Warszawa", latitude: 52, longitude: 21, services: { create: { type: "DOG_WALK", durationMinutes: 30, priceCents: 1000 } } }, include: { services: true } });
+    const pet = await prisma.pet.create({ data: { ...completePetFixture(), accountId: owner.id, name: "Figa", gender: "FEMALE" } });
+    const sitter = await prisma.sitterProfile.create({ data: { verificationStatus: "VERIFIED", accountId: account.id, bio: "Opiekun z doświadczeniem", city: "Warszawa", latitude: 52, longitude: 21, services: { create: { type: "DOG_WALK", durationMinutes: 30, priceCents: 1000 } } }, include: { services: true } });
     const start = new Date(Date.now() + 86_400_000);
     const slot = await prisma.availabilitySlot.create({ data: { sitterProfileId: sitter.id, startsAt: start, endsAt: new Date(start.getTime() + 3_600_000) } });
-    const booking = await request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, sitterServiceId: sitter.services[0].id, availabilitySlotId: slot.id });
+    const booking = await request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: sitter.services[0].id, availabilitySlotId: slot.id });
     expect(booking.status).toBe(201);
     expect((await request(app).post("/api/account/deactivate").set("Authorization", account.auth).send({ confirmation: "DEACTIVATE" })).status).toBe(204);
     expect((await prisma.sitterProfile.findUniqueOrThrow({ where: { id: sitter.id } })).isActive).toBe(false);

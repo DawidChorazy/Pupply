@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -73,6 +74,15 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8081}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:4000}
+      PAYU_ENABLED: ${PAYU_ENABLED:-false}
+      PAYU_ENVIRONMENT: ${PAYU_ENVIRONMENT:-sandbox}
+      PAYU_POS_ID: ${PAYU_POS_ID:-}
+      PAYU_CLIENT_ID: ${PAYU_CLIENT_ID:-}
+      PAYU_CLIENT_SECRET: ${PAYU_CLIENT_SECRET:-}
+      PAYU_SECOND_KEY: ${PAYU_SECOND_KEY:-}
+      PAYU_NOTIFY_URL: ${PAYU_NOTIFY_URL:-}
+      PAYU_CONTINUE_URL: ${PAYU_CONTINUE_URL:-}
+      PAYMENT_TIMEOUT_MINUTES: ${PAYMENT_TIMEOUT_MINUTES:-30}
       AUTH_RATE_LIMIT_WINDOW_MINUTES: ${AUTH_RATE_LIMIT_WINDOW_MINUTES:-15}
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-20}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-0}

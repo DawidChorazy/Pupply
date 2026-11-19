@@ -7,6 +7,7 @@ const bookingFields = {
   sitterServiceId: z.string().min(1),
   durationMinutes: z.number().int().min(15).max(1440).optional(),
   expectedPriceCents: z.number().int().min(0).max(2_147_483_647).optional(),
+  pickupAddress: z.string().trim().min(5).max(500),
   note: z.string().trim().max(1000).optional()
 };
 
@@ -22,7 +23,8 @@ export const createBookingsSchema = z.object({
 });
 
 export const updateBookingStatusSchema = z.object({
-  status: z.enum(["ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED"])
+  status: z.enum(["ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED"]),
+  expectedCancellationFeeCents: z.number().int().min(0).max(2_147_483_647).optional()
 });
 
 export const listBookingsSchema = z.object({

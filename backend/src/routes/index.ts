@@ -14,15 +14,24 @@ import { sitterRouter } from "./sitter.routes";
 import { userRouter } from "./user.routes";
 import { uploadRouter } from "./upload.routes";
 import { locationRouter } from "./location.routes";
+import { walkRouter } from "./walk.routes";
+import { paymentRouter, paymentAdminRouter } from "./payment.routes";
 
 const apiRouter = Router();
+apiRouter.use((req, res, next) => {
+  if (req.headers.authorization) res.setHeader("Cache-Control", "no-store");
+  next();
+});
 apiRouter.use("/conversations", chatRouter);
 apiRouter.use("/account", accountRouter);
 apiRouter.use("/admin", adminRouter);
+apiRouter.use("/admin/payments", paymentAdminRouter);
+apiRouter.use("/payments", paymentRouter);
 apiRouter.use("/gamification", gamificationRouter);
 apiRouter.use("/locations", locationRouter);
 
 apiRouter.use("/auth", authRouter);
+apiRouter.use("/bookings/:bookingId/walk", walkRouter);
 apiRouter.use("/bookings", bookingRouter);
 apiRouter.use("/clinics", clinicRouter);
 apiRouter.use("/notifications", notificationRouter);

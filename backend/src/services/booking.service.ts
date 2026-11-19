@@ -4,9 +4,12 @@ import { createHash } from "node:crypto";
 import { prisma } from "../config/prisma";
 import { AppError } from "../utils/app-error";
 import { env } from "../config/env";
-import { requireVerifiedEmail } from "./account-access.service";
+import { requireVerifiedEmail, requireVerifiedSitter } from "./account-access.service";
 import { expireBookingRequests, expireConflictingBookingRequests } from "./booking-expiry.service";
 import { retryTransaction } from "../utils/transaction-retry";
+import { assertBookingPaid, cancellationFee, schedulePaymentCancellation, settleBooking } from "./payment-state.service";
+import { missingPetFields, vaccinationDateCutoff } from "./pets.service";
+import { z } from "zod";
 
 function requireUser(role: AccountRole) {
   if (role !== "USER") throw new AppError(403, "Only users can manage bookings", "FORBIDDEN");
@@ -14,6 +17,11 @@ function requireUser(role: AccountRole) {
 
 const bookingInclude = {
   review: true,
+  walkSession: true,
+  payments: { select: { id: true, status: true, amountCents: true, currency: true, environment: true, createdAt: true, completedAt: true,
+    refund: { select: { id: true, amountCents: true, status: true } } }, orderBy: { createdAt: "desc" as const }, take: 5 },
+  settlement: true,
+  issue: { select: { id: true, status: true } },
   pet: { select: { id: true, name: true, breed: true } },
   owner: { select: { id: true, userProfile: { select: { fullName: true } } } },
   sitter: { select: { id: true, userProfile: { select: { fullName: true } } } },
@@ -28,6 +36,7 @@ type BookingInput = {
   startsAt?: Date;
   durationMinutes?: number;
   expectedPriceCents?: number;
+  pickupAddress: string;
   note?: string;
 };
 
@@ -39,12 +48,13 @@ function requestHash(kind: string, inputs: BookingInput[]) {
   const entries = inputs.map(input => ({
     petId: input.petId, sitterServiceId: input.sitterServiceId, availabilitySlotId: input.availabilitySlotId,
     startsAt: input.startsAt?.toISOString() ?? null, durationMinutes: input.durationMinutes ?? null,
-    expectedPriceCents: input.expectedPriceCents ?? null, note: input.note ?? null
+    expectedPriceCents: input.expectedPriceCents ?? null, pickupAddress: input.pickupAddress, note: input.note ?? null
   })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
   return createHash("sha256").update(JSON.stringify({ kind, entries })).digest("hex");
 }
 
 async function createBookingInTransaction(tx: Prisma.TransactionClient, accountId: string, input: BookingInput) {
+  const pickupAddress = z.string().trim().min(5).max(500).parse(input.pickupAddress);
   const [pet, service, slot] = await Promise.all([
     tx.pet.findFirst({ where: { id: input.petId, accountId } }),
     tx.sitterService.findFirst({
@@ -69,6 +79,7 @@ async function createBookingInTransaction(tx: Prisma.TransactionClient, accountI
     WHERE id IN (${accountId}, ${service.sitterProfile.accountId}) ORDER BY id FOR SHARE`;
   if (participants.length !== 2 || participants.some(account => account.blockedAt || account.deactivatedAt || !account.emailVerifiedAt))
     throw new AppError(409, "One of the booking participants is unavailable", "ACCOUNT_UNAVAILABLE");
+  await requireVerifiedSitter(service.sitterProfile.accountId, tx);
   const durationMinutes = input.durationMinutes ?? service.durationMinutes;
   if (!Number.isInteger(durationMinutes) || durationMinutes < service.durationMinutes || durationMinutes > 1440) {
     throw new AppError(400, "Czas opieki musi być co najmniej tak długi jak wybrana usługa i nie może przekroczyć 24 godzin.", "INVALID_BOOKING_DURATION");
@@ -83,6 +94,10 @@ async function createBookingInTransaction(tx: Prisma.TransactionClient, accountI
   }
   const startsAt = input.startsAt ?? slot.startsAt;
   const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
+  const proof = await tx.petDocument.findFirst({ where: { petId: pet.id, purpose: "VACCINATION", uploadedAt: { not: null },
+    OR: [{ expiresAt: null }, { expiresAt: { gte: vaccinationDateCutoff(endsAt) } }] } });
+  const missing = missingPetFields(pet, !!proof);
+  if (missing.length) throw new AppError(409, `Uzupełnij profil pupila przed rezerwacją: ${missing.join(", ")}.`, "PET_PROFILE_INCOMPLETE");
   if (startsAt < slot.startsAt || startsAt <= new Date() || endsAt > slot.endsAt) {
     throw new AppError(409, "Selected time does not fit the available slot", "SLOT_UNAVAILABLE");
   }
@@ -104,7 +119,9 @@ async function createBookingInTransaction(tx: Prisma.TransactionClient, accountI
       endsAt,
       expiresAt,
       priceCents,
+      paymentRequired: priceCents > 0,
       currency: "PLN",
+      pickupAddress,
       note: input.note
     },
     include: bookingInclude
@@ -200,10 +217,15 @@ export async function getBooking(accountId: string, role: AccountRole, bookingId
   await expireBookingRequests(new Date(), { accountId });
   const booking = await prisma.booking.findFirst({
     where: { id: bookingId, OR: [{ ownerAccountId: accountId }, { sitterAccountId: accountId }] },
-    include: bookingInclude
+    include: {
+      ...bookingInclude,
+      pet: { select: { ...bookingInclude.pet.select, temperament: true, mobilityRestrictions: true, careInstructions: true } }
+    }
   });
   if (!booking) throw new AppError(404, "Booking was not found", "BOOKING_NOT_FOUND");
-  return booking;
+  if (booking.status === "ACCEPTED") return booking;
+  const { id, name, breed } = booking.pet;
+  return { ...booking, pet: { id, name, breed } };
 }
 
 function assertStatusTransition(
@@ -231,23 +253,40 @@ export async function updateBookingStatus(
   accountId: string,
   role: AccountRole,
   bookingId: string,
-  target: Exclude<BookingStatus, "REQUESTED" | "EXPIRED">
+  target: Exclude<BookingStatus, "REQUESTED" | "EXPIRED">,
+  expectedCancellationFeeCents?: number
 ) {
   if (target === "ACCEPTED") await requireVerifiedEmail(accountId);
   const booking = await getBooking(accountId, role, bookingId);
-  assertStatusTransition(booking, accountId, target);
   const recipientId = booking.ownerAccountId === accountId ? booking.sitterAccountId : booking.ownerAccountId;
   const notification = notificationForStatus[target];
 
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Booking" WHERE id = ${booking.id} FOR UPDATE`;
+    const current = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
+    assertStatusTransition(current, accountId, target);
+    if (target === "ACCEPTED") await requireVerifiedSitter(accountId, tx);
+    if (target === "COMPLETED") await assertBookingPaid(tx, current);
+    const fee = target === "CANCELLED" ? cancellationFee(current, accountId) : 0;
+    if (fee > 0 && expectedCancellationFeeCents !== fee)
+      throw new AppError(409, "Anulowanie wymaga potwierdzenia aktualnej opłaty. Sprawdź podsumowanie anulowania.", "CANCELLATION_FEE_CONFIRMATION_REQUIRED");
+    const walk = await tx.walkSession.findUnique({ where: { bookingId: booking.id } });
+    if (target === "COMPLETED" && walk && !walk.endedAt)
+      throw new AppError(409, "Zakończ aktywny spacer na ekranie GPS, aby zapisać całą trasę.", "WALK_ACTIVE");
     const changed = await tx.booking.updateMany({
-      where: { id: booking.id, status: booking.status, ...(target === "ACCEPTED" ? { startsAt: { gt: new Date() }, expiresAt: { gt: new Date() } } : {}) },
+      where: { id: booking.id, status: current.status, ...(target === "ACCEPTED" ? { startsAt: { gt: new Date() }, expiresAt: { gt: new Date() } } : {}) },
       data: {
         status: target,
+        ...(target === "ACCEPTED" && current.paymentRequired ? { paymentDueAt: new Date(Math.min(current.startsAt.getTime(), Date.now() + env.PAYMENT_TIMEOUT_MINUTES * 60_000)) } : {}),
+        ...(target === "CANCELLED" ? { cancellationFeeCents: fee, cancelledAt: new Date() } : {}),
         activeSlotKey: ["REJECTED", "CANCELLED", "COMPLETED"].includes(target) ? null : booking.availabilitySlotId
       }
     });
     if (changed.count !== 1) throw new AppError(409, "Booking was changed by another request", "BOOKING_CONFLICT");
+    if (target === "CANCELLED") await tx.walkSession.updateMany({ where: { bookingId: booking.id, endedAt: null }, data: { endedAt: new Date(), endReason: "CANCELLED" } });
+    const updated = await tx.booking.findUniqueOrThrow({ where: { id: booking.id } });
+    if (["CANCELLED", "REJECTED"].includes(target)) await schedulePaymentCancellation(tx, updated);
+    if (target === "COMPLETED") await settleBooking(tx, updated);
     await tx.notification.create({
       data: {
         accountId: recipientId,

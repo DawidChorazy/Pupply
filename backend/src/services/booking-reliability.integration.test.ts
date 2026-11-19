@@ -1,3 +1,4 @@
+import { completePetFixture } from "../test-fixtures";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -13,18 +14,18 @@ async function fixture() {
     return { id: account.id, auth: `Bearer ${signAccessToken(account.id, "USER")}` };
   };
   const sitter = await user(), owner = await user(), stranger = await user();
-  const profile = await prisma.sitterProfile.create({ data: {
+  const profile = await prisma.sitterProfile.create({ data: { verificationStatus: "VERIFIED",
     accountId: sitter.id, bio: "Opiekun do testów niezawodności", city: "Warszawa", latitude: 52.23, longitude: 21.01,
     services: { create: { type: "DOG_WALK", durationMinutes: 30, priceCents: 3000 } }
   }, include: { services: true } });
-  const pet = await prisma.pet.create({ data: { accountId: owner.id, name: "Figa", gender: "FEMALE" } });
+  const pet = await prisma.pet.create({ data: { ...completePetFixture(), accountId: owner.id, name: "Figa", gender: "FEMALE" } });
   const start = Date.now() + 48 * 3_600_000;
   const interval = (from: number, to: number) => ({ startsAt: new Date(start + from * 60_000).toISOString(), endsAt: new Date(start + to * 60_000).toISOString() });
   const slot = async (from = 0, to = 240) => prisma.availabilitySlot.create({ data: { sitterProfileId: profile.id, startsAt: new Date(interval(from, to).startsAt), endsAt: new Date(interval(from, to).endsAt) } });
   const create = (availabilitySlotId: string, startsAt: string, key?: string, extra: object = {}) => {
     const pending = request(app).post("/api/bookings").set("Authorization", owner.auth);
     if (key) pending.set("Idempotency-Key", key);
-    return pending.send({ petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId, startsAt, ...extra });
+    return pending.send({ petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId, startsAt, ...extra });
   };
   const publicUrl = `/api/sitters/${profile.id}/availability?sitterServiceId=${profile.services[0].id}`;
   return { sitter, owner, stranger, profile, pet, interval, slot, create, publicUrl };
@@ -71,7 +72,7 @@ describe("booking reliability regressions", () => {
   it("replays a multi-day operation without duplicate bookings or notifications", async () => {
     const data = await fixture(), key = randomUUID();
     const first = await data.slot(), second = await data.slot(1440, 1680);
-    const payload = { petId: data.pet.id, sitterServiceId: data.profile.services[0].id, durationMinutes: 60, expectedPriceCents: 6000,
+    const payload = { petId: data.pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: data.profile.services[0].id, durationMinutes: 60, expectedPriceCents: 6000,
       slots: [first, second].map(slot => ({ availabilitySlotId: slot.id, startsAt: slot.startsAt.toISOString() })) };
     const create = () => request(app).post("/api/bookings/batch").set("Authorization", data.owner.auth).set("Idempotency-Key", key).send(payload);
     const responses = await Promise.all([create(), create()]);
@@ -87,7 +88,7 @@ describe("booking reliability regressions", () => {
     const first = await data.slot(), second = await data.slot(1440, 1680);
     const existing = await data.create(second.id, second.startsAt.toISOString());
     expect(existing.status).toBe(201);
-    const payload = { petId: data.pet.id, sitterServiceId: data.profile.services[0].id,
+    const payload = { petId: data.pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: data.profile.services[0].id,
       slots: [first, second].map(slot => ({ availabilitySlotId: slot.id, startsAt: slot.startsAt.toISOString() })) };
     const create = () => request(app).post("/api/bookings/batch").set("Authorization", data.owner.auth).set("Idempotency-Key", key).send(payload);
     expect((await create()).status).toBe(409);

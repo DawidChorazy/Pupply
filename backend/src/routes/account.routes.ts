@@ -10,6 +10,10 @@ import { changePassword, requestEmailChange, setAccountState } from "../services
 import { requireVerifiedEmail } from "../services/account-access.service";
 import { getClinicVerificationForAdmin, listClinicVerifications, reviewClinicVerification } from "../services/clinic-verification.service";
 import { listClinicVerificationsSchema, reviewClinicVerificationSchema } from "../validation/clinic.schemas";
+import { getSitterVerificationForAdmin, listSitterVerifications, readSitterVerificationFile, reviewSitterVerification } from "../services/sitter-verification.service";
+import { listSitterVerificationsSchema, reviewSitterVerificationSchema } from "../validation/sitter-verification.schemas";
+import { listBookingIssuesSchema, reviewBookingIssueSchema } from "../validation/booking-issue.schemas";
+import { listBookingIssues, reviewBookingIssue } from "../services/booking-issue.service";
 
 export const accountRouter = Router();
 accountRouter.use(requireAuth);
@@ -41,6 +45,24 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth);
 adminRouter.use((req, _res, next) => next(req.auth?.role === "ADMIN" ? undefined : new AppError(403, "Administrator access required", "FORBIDDEN")));
 adminRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+adminRouter.get("/issues", asyncHandler(async (req, res) => {
+  res.json(await listBookingIssues(listBookingIssuesSchema.parse(req.query)));
+}));
+adminRouter.patch("/issues/:issueId", asyncHandler(async (req, res) => {
+  res.json({ issue: await reviewBookingIssue(req.auth!.accountId, String(req.params.issueId), reviewBookingIssueSchema.parse(req.body)) });
+}));
+adminRouter.get("/sitters", asyncHandler(async (req, res) => {
+  res.json(await listSitterVerifications(listSitterVerificationsSchema.parse(req.query)));
+}));
+adminRouter.get("/sitters/:accountId/verification", asyncHandler(async (req, res) => {
+  res.json(await getSitterVerificationForAdmin(String(req.params.accountId)));
+}));
+adminRouter.get("/sitters/:accountId/verification/files/:fileId", asyncHandler(async (req, res) => {
+  res.json(await readSitterVerificationFile(req.auth!.accountId, req.auth!.role, String(req.params.accountId), String(req.params.fileId)));
+}));
+adminRouter.post("/sitters/:accountId/verification", asyncHandler(async (req, res) => {
+  res.json({ verification: await reviewSitterVerification(req.auth!.accountId, String(req.params.accountId), reviewSitterVerificationSchema.parse(req.body)) });
+}));
 adminRouter.get("/clinics", asyncHandler(async (req, res) => {
   res.json(await listClinicVerifications(listClinicVerificationsSchema.parse(req.query)));
 }));

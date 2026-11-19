@@ -1,3 +1,4 @@
+import { completePetFixture } from "../test-fixtures";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +19,7 @@ async function user(role: "USER" | "CLINIC" = "USER") {
 }
 async function fixture() {
   const a = await user(), b = await user(), stranger = await user();
-  const sitter = await prisma.sitterProfile.create({ data: { accountId: b.id, bio: "Doświadczony opiekun zwierząt.",
+  const sitter = await prisma.sitterProfile.create({ data: { verificationStatus: "VERIFIED", accountId: b.id, bio: "Doświadczony opiekun zwierząt.",
     city: "Warszawa", latitude: 52, longitude: 21, services: { create: { type: "DOG_WALK", priceCents: 3000, durationMinutes: 30 } } }, include: { services: true } });
   return { a, b, stranger, sitter };
 }
@@ -45,10 +46,10 @@ describe("private chat", () => {
     const { a, b, sitter } = await fixture();
     const opened = await Promise.all(Array.from({ length: 5 }, () => open(a.auth, sitter.id)));
     expect(new Set(opened.map(item => item.id)).size).toBe(1);
-    const pet = await prisma.pet.create({ data: { accountId: a.id, name: "Figa", gender: "FEMALE" } });
+    const pet = await prisma.pet.create({ data: { ...completePetFixture(), accountId: a.id, name: "Figa", gender: "FEMALE" } });
     const startsAt = new Date(Date.now() + 86_400_000);
     const slot = await prisma.availabilitySlot.create({ data: { sitterProfileId: sitter.id, startsAt, endsAt: new Date(startsAt.getTime() + 3_600_000) } });
-    const booked = await request(app).post("/api/bookings").set("Authorization", a.auth).send({ petId: pet.id, sitterServiceId: sitter.services[0].id, availabilitySlotId: slot.id });
+    const booked = await request(app).post("/api/bookings").set("Authorization", a.auth).send({ petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: sitter.services[0].id, availabilitySlotId: slot.id });
     expect(booked.status).toBe(201);
     expect(booked.body.booking.status).toBe("REQUESTED");
     for (const auth of [a.auth, b.auth]) {

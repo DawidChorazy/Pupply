@@ -9,6 +9,7 @@ import { openApiSpec } from "./docs/openapi";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler";
 import { requestContext } from "./middleware/request-context";
 import { apiRouter } from "./routes";
+import { payuWebhookRouter } from "./routes/payment.routes";
 import { collectMetrics, metrics } from "./middleware/metrics";
 
 const app = express();
@@ -43,6 +44,7 @@ app.use(
     credentials: true
   })
 );
+app.use("/api/payments/payu/notify", payuWebhookRouter);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/", (_req, res) => {

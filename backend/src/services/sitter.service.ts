@@ -262,7 +262,7 @@ export async function getSitterAvailability(profileId: string, sitterServiceId: 
   const window = calendarWindow(input);
   const service = await prisma.sitterService.findFirst({
     where: { id: sitterServiceId, sitterProfileId: profileId, isActive: true, sitterProfile: {
-      isActive: true, account: { emailVerifiedAt: { not: null }, blockedAt: null, deactivatedAt: null }
+      isActive: true, verificationStatus: "VERIFIED", account: { role: "USER", emailVerifiedAt: { not: null }, blockedAt: null, deactivatedAt: null }
     } }
   });
   if (!service) throw new AppError(404, "Oferta opiekuna jest już niedostępna.", "SERVICE_NOT_FOUND");
@@ -282,6 +282,7 @@ export async function getSitterAvailability(profileId: string, sitterServiceId: 
 export async function searchSitters(input: {
   latitude: number; longitude: number; radiusKm: number; serviceType?: SitterServiceType;
   from?: Date; to?: Date; page: number; pageSize: number; minRating?: number;
+  minPriceCents?: number; maxPriceCents?: number; minCompletedWalks?: number;
 }) {
   const now = new Date();
   const serviceFilter = input.serviceType ? Prisma.sql`AND v.type = ${input.serviceType}::"SitterServiceType"` : Prisma.empty;
@@ -302,11 +303,17 @@ export async function searchSitters(input: {
         cos(radians(${input.latitude}::double precision)) * cos(radians(p.latitude)) *
         cos(radians(p.longitude - ${input.longitude}::double precision))))) AS distance
       FROM "SitterProfile" p JOIN "Account" ac ON ac.id = p."accountId"
-      WHERE p."isActive" = true AND ac."emailVerifiedAt" IS NOT NULL AND ac."blockedAt" IS NULL AND ac."deactivatedAt" IS NULL
+      WHERE p."isActive" = true AND p."verificationStatus" = 'VERIFIED' AND ac.role = 'USER' AND ac."emailVerifiedAt" IS NOT NULL AND ac."blockedAt" IS NULL AND ac."deactivatedAt" IS NULL
+      ${input.minCompletedWalks !== undefined ? Prisma.sql`AND (SELECT COUNT(*) FROM "Booking" completed
+        JOIN "SitterService" offered ON offered.id = completed."sitterServiceId"
+        WHERE completed."sitterAccountId" = p."accountId" AND completed.status = 'COMPLETED'
+          AND completed."endsAt" <= ${now} AND offered.type = 'DOG_WALK') >= ${input.minCompletedWalks}` : Prisma.empty}
       ${input.minRating !== undefined ? Prisma.sql`AND (SELECT ROUND(AVG((r.punctuality + r.communication + r.quality)::numeric / 3), 2)
         FROM "SitterReview" r WHERE r."sitterAccountId" = p."accountId") >= ${input.minRating}` : Prisma.empty}
       AND EXISTS (SELECT 1 FROM "SitterService" v JOIN free f ON f."sitterProfileId" = v."sitterProfileId"
         WHERE v."sitterProfileId" = p.id AND v."isActive" = true ${serviceFilter}
+        ${input.minPriceCents !== undefined ? Prisma.sql`AND v."priceCents" >= ${input.minPriceCents}` : Prisma.empty}
+        ${input.maxPriceCents !== undefined ? Prisma.sql`AND v."priceCents" <= ${input.maxPriceCents}` : Prisma.empty}
         AND f."endsAt" - GREATEST(f."startsAt", ${now}) >= v."durationMinutes" * interval '1 minute'
         ${input.from && input.to ? Prisma.sql`AND GREATEST(f."startsAt", ${now}) <= ${input.from} AND f."endsAt" >= ${input.to}` : Prisma.empty})
     ), matches AS (SELECT * FROM nearby WHERE distance <= ${input.radiusKm} AND distance <= "serviceRadiusKm")
@@ -316,10 +323,10 @@ export async function searchSitters(input: {
     prisma.$queryRaw<{total: bigint}[]>`${candidates} SELECT count(*) AS total FROM matches`
   ], { isolationLevel: "RepeatableRead" });
   const profiles = await prisma.sitterProfile.findMany({
-    where: { id: { in: rows.map(row => row.id) } },
+    where: { id: { in: rows.map(row => row.id) }, verificationStatus: "VERIFIED", account: { role: "USER", emailVerifiedAt: { not: null }, blockedAt: null, deactivatedAt: null } },
     include: {
       account: { select: { userProfile: { select: { fullName: true } } } },
-      services: { where: { isActive: true, type: input.serviceType }, orderBy: { priceCents: "asc" } },
+      services: { where: { isActive: true, type: input.serviceType, priceCents: { gte: input.minPriceCents, lte: input.maxPriceCents } }, orderBy: { priceCents: "asc" } },
       availability: { where: { archivedAt: null, endsAt: { gt: now } }, orderBy: { startsAt: "asc" },
         include: { bookings: { where: activeBookingWhere(now), orderBy: { startsAt: "asc" } } } }
     }
@@ -336,7 +343,7 @@ export async function searchSitters(input: {
       id: profile.id, displayName: profile.account.userProfile?.fullName ?? "Opiekun Pupply",
       bio: profile.bio, city: profile.city, region: profile.region,
       photoUrl: await getPetPhotoUrl(profile.photoKey), serviceRadiusKm: profile.serviceRadiusKm,
-      ratingSummary: summaries.get(profile.accountId) ?? emptyReviewSummary(),
+      isVerified: true, ratingSummary: summaries.get(profile.accountId) ?? emptyReviewSummary(),
       services: profile.services, availability, distanceKm: Math.round(row.distance * 10) / 10
     };
   }));

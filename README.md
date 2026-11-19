@@ -18,6 +18,7 @@ Repozytorium zawiera aplikacje mobilna/web w Expo oraz backend marketplace opiek
 - Odswiezanie sesji: POST /api/auth/refresh
 - Profil zalogowanego uzytkownika: GET /api/users/me
 - Profile opiekunow, uslugi i dostepnosc: /api/sitters
+- Weryfikacja tożsamości opiekuna: prywatne zdjęcia dokumentu i twarzy, decyzja administratora i blokada zleceń do zatwierdzenia; [instrukcja](docs/sitter-verification.md).
 - Rezerwacje spacerow i opieki: /api/bookings
 - Powiadomienia: /api/notifications
 - Prywatny czat właściciel–opiekun: /api/conversations, historia i nieprzeczytane; [opis i testy](docs/chat.md)
@@ -206,10 +207,23 @@ potrzebuje dostępu do GitHuba i modułów Go; kolejne korzystają z cache.
 - Po sukcesie access/refresh token zapisywane sa lokalnie
 - Po zalogowaniu lub rejestracji aplikacja przechodzi do sekcji tabs
 
-## Poza zakresem obecnego MVP
+## Odbiór lokalnego MVP backendu
 
-- Platnosci online
-- Pelny modul obslugi klinik
+Po instalacji zależności poleceniem `npm --prefix backend ci` uruchom
+`npm run test:backend`. Zestaw testowy sam przygotuje tymczasowy PostgreSQL
+i MinIO w Dockerze lub Podmanie, zastosuje migracje i przejdzie scenariusz API.
+
+Do demonstracji ze standardową konfiguracją `PAYU_ENABLED=false` użyj oferty
+spaceru za 0 zł i terminu za 10 minut. Właściciel rezerwuje spacer, a zweryfikowany
+opiekun go akceptuje. W szczegółach zaakceptowanej rezerwacji oboje mogą
+odczytać aktualny temperament pupila, ograniczenia ruchowe i zalecenia dotyczące
+opieki. Opiekun może rozpocząć spacer przez API GPS, zapisać punkty i zakończyć
+usługę. Właściciel zobaczy rezerwację ze statusem `COMPLETED`.
+
+Odbiór płatnej oferty wymaga skonfigurowanego sandboxa PayU. Kryterium odbioru
+obejmuje potwierdzenie płatności `COMPLETED`, anulowanie rezerwacji i zwrot
+potwierdzony przez operatora statusem `FINALIZED`. Publiczne wydanie z wypłatami
+dla opiekunów i pełny moduł wizyt klinicznych pozostają osobnymi etapami.
 
 ## Oceny spacerowiczów
 
@@ -240,11 +254,13 @@ API (wymaga zalogowanego konta `USER`): `GET /api/gamification/quests`, `POST /a
 
 ## Rezerwacje, dokumenty i bezpieczeństwo kont
 
-Główne ekrany spacerów i marketplace korzystają teraz z tego samego API rezerwacji. Ekran główny pokazuje prawdziwe rezerwacje `DOG_WALK`, a szczegóły pobierają aktualny status z serwera. Mapa i etapy spaceru nie są już symulowane w tym przepływie; rzeczywiste śledzenie GPS pozostaje osobnym rozszerzeniem.
+Płatności obsługuje PayU Europe z przekierowaniem do formularza operatora. Po akceptacji przez opiekuna nowa płatna rezerwacja musi zostać opłacona przed usługą; nieopłacony termin wygasa domyślnie po 30 minutach lub o godzinie rozpoczęcia. Backend potwierdza płatność przez podpisany webhook lub odczyt API PayU, obsługuje ponowienia, historię oraz pełne/częściowe zwroty przy anulowaniu. Rozliczenia testowe są oddzielone od produkcyjnych. Szczegóły konfiguracji i zakresu: [płatności PayU](docs/payments.md). Automatyczne wypłaty do opiekunów i portfel rekompensat pozostają osobnym etapem.
+
+Główne ekrany spacerów i marketplace korzystają z tego samego API rezerwacji. Ekran główny pokazuje prawdziwe rezerwacje `DOG_WALK`, a szczegóły pobierają aktualny status z serwera. W „Moje rezerwacje” przycisk **Spacer GPS** prowadzi do rozpoczęcia i zakończenia spaceru przez opiekuna oraz prywatnego podglądu trasy dla właściciela. Zapisywane są rzeczywisty czas, punkty i dystans. Web wymaga localhost/HTTPS i otwartej karty; zapis w tle na telefonie wymaga własnego buildu oraz zgód lokalizacji. Szczegóły i ograniczenia: [śledzenie GPS](docs/walk-tracking.md).
 
 Rezerwacja zapisuje własne `startsAt`, `endsAt` i `expiresAt`. Parametr `startsAt` jest opcjonalny przy tworzeniu rezerwacji; bez niego używany jest początek slotu. Wyszukiwarka zwraca wolne fragmenty dostępności, więc kilka fragmentów może mieć ten sam identyfikator slotu. Klient musi przekazać również wybrany `startsAt`. Godzinna usługa rezerwuje godzinę, a reszta przedziału pozostaje dostępna. PostgreSQL blokuje nakładające się terminy opiekuna i pupila; sąsiednie przedziały są dozwolone.
 
-Prośby `REQUESTED` wygasają po 24 godzinach lub z chwilą rozpoczęcia terminu, zależnie od tego, co nastąpi wcześniej. Ustawienie `BOOKING_REQUEST_TTL_HOURS` zmienia ten limit dla nowych rezerwacji. Status `EXPIRED` ustawia serwer; obie strony otrzymują powiadomienie. Opiekun może zakończyć zaakceptowaną rezerwację dopiero po jej własnym `endsAt`.
+Prośby `REQUESTED` wygasają po 24 godzinach lub z chwilą rozpoczęcia terminu, zależnie od tego, co nastąpi wcześniej. Ustawienie `BOOKING_REQUEST_TTL_HOURS` zmienia ten limit dla nowych rezerwacji. Status `EXPIRED` ustawia serwer; obie strony otrzymują powiadomienie. Zwykłe zakończenie zaakceptowanej rezerwacji wymaga upływu jej `endsAt`; rozpoczęty spacer GPS kończy się osobnym przyciskiem z zapisem rzeczywistego czasu, również przed planowanym końcem.
 
 Dokumenty medyczne są zapisane w PostgreSQL i prywatnym buckecie `S3_DOCUMENT_BUCKET` (domyślnie `pupply-documents`). Ten bucket musi być inny niż publiczny bucket zdjęć i nie może mieć publicznego odczytu. Compose tworzy go z prywatną polityką. Upload obejmuje przygotowanie URL-a, wysłanie PDF-a i potwierdzenie pliku; serwer sprawdza rozmiar, typ oraz sygnaturę `%PDF-`. Pobieranie wymaga uprawnień właściciela i zwraca podpisany URL ważny przez 5 minut. Daty ważności w API mają format `RRRR-MM-DD`, w formularzu `DD.MM.RRRR`. Nie ma migracji dokumentów przechowywanych wcześniej wyłącznie w pamięci przeglądarki.
 

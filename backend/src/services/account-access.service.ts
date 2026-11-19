@@ -7,6 +7,15 @@ export async function requireVerifiedEmail(accountId: string) {
   if (!account?.emailVerifiedAt) throw new AppError(403, "Potwierdź adres e-mail przed korzystaniem z rezerwacji i oferowaniem opieki.", "EMAIL_NOT_VERIFIED");
 }
 
+export async function requireVerifiedSitter(accountId: string, client: Prisma.TransactionClient) {
+  await client.$queryRaw`SELECT id FROM "Account" WHERE id = ${accountId} FOR SHARE`;
+  const profile = await client.sitterProfile.findUnique({ where: { accountId }, include: { account: true } });
+  if (!profile || profile.account.role !== "USER" || profile.account.blockedAt || profile.account.deactivatedAt)
+    throw new AppError(403, "Konto opiekuna jest niedostępne.", "ACCOUNT_UNAVAILABLE");
+  if (!profile.account.emailVerifiedAt) throw new AppError(403, "Najpierw potwierdź adres e-mail.", "EMAIL_NOT_VERIFIED");
+  if (profile.verificationStatus !== "VERIFIED") throw new AppError(403, "Najpierw przejdź weryfikację tożsamości opiekuna.", "SITTER_NOT_VERIFIED");
+}
+
 // Pass the transaction that publishes a clinic service or accepts a visit.
 export async function requireVerifiedClinic(accountId: string, client: Prisma.TransactionClient) {
   await client.$queryRaw`SELECT id FROM "Account" WHERE id = ${accountId} FOR SHARE`;

@@ -114,11 +114,11 @@ export async function deletePetPhoto(photoKey: string | null) {
   await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: photoKey }));
 }
 
-export async function createDocumentUpload(objectKey: string, sizeBytes: number) {
+export async function createDocumentUpload(objectKey: string, sizeBytes: number, contentType = "application/pdf") {
   getStorage();
   if (sizeBytes > env.DOCUMENT_MAX_BYTES) throw new AppError(413, "PDF is too large", "DOCUMENT_TOO_LARGE");
   const uploadUrl = await getSignedUrl(uploadClient!, new PutObjectCommand({
-    Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey, ContentType: "application/pdf", ContentLength: sizeBytes
+    Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey, ContentType: contentType, ContentLength: sizeBytes
   }), { expiresIn: 600 });
   return { uploadUrl, expiresIn: 600 };
 }
@@ -135,11 +135,11 @@ export async function assertDocumentUploaded(objectKey: string, sizeBytes: numbe
   }
 }
 
-export async function getDocumentUrl(objectKey: string, expiresIn = 300) {
+export async function getDocumentUrl(objectKey: string, expiresIn = 300, contentType = "application/pdf") {
   getStorage();
   return getSignedUrl(uploadClient!, new GetObjectCommand({
     Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey,
-    ResponseContentType: "application/pdf", ResponseContentDisposition: "attachment"
+    ResponseContentType: contentType, ResponseContentDisposition: "attachment", ResponseCacheControl: "private, no-store"
   }), { expiresIn });
 }
 
@@ -148,19 +148,59 @@ export async function deleteDocumentObject(objectKey: string) {
   await s3.send(new DeleteObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: objectKey }));
 }
 
+export async function createVerificationUpload(stagingKey: string, contentType: string, sizeBytes: number) {
+  getStorage();
+  return getSignedUrl(uploadClient!, new PutObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: stagingKey,
+    ContentType: contentType, ContentLength: sizeBytes }), { expiresIn: 600 });
+}
+
+export async function sealVerificationUpload(file: { stagingKey: string; objectKey: string; contentType: string; sizeBytes: number }, allowPdf = false) {
+  const { client: s3 } = getStorage();
+  try {
+    const head = await s3.send(new HeadObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: file.stagingKey }));
+    if (head.ContentLength !== file.sizeBytes || head.ContentType !== file.contentType || !head.ETag) throw new Error("Metadata mismatch");
+    const response = await s3.send(new GetObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: file.stagingKey,
+      IfMatch: head.ETag, Range: `bytes=0-${file.sizeBytes}` }));
+    if (!response.Body) throw new Error("Missing image");
+    const bytes = Buffer.from(await response.Body.transformToByteArray());
+    const valid = isVerificationImage(bytes, file.contentType) || (allowPdf && file.contentType === "application/pdf" && bytes.subarray(0, 5).toString() === "%PDF-");
+    if (bytes.length !== file.sizeBytes || !valid) throw new Error("Invalid document");
+    // Only the server can write this final key. An outstanding staging PUT URL
+    // cannot change the evidence after submission or while an admin reviews it.
+    await s3.send(new PutObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: file.objectKey,
+      Body: bytes, ContentType: file.contentType, CacheControl: "private, no-store" }));
+  } catch {
+    throw new AppError(400, allowPdf ? "Dokument nie został przesłany poprawnie. Wybierz PDF lub zdjęcie JPEG, PNG, WebP." : "Zdjęcie nie zostało przesłane poprawnie. Wybierz plik JPEG, PNG lub WebP i spróbuj ponownie.", allowPdf ? "INVALID_DOCUMENT_UPLOAD" : "INVALID_VERIFICATION_UPLOAD");
+  }
+}
+
+export function isVerificationImage(bytes: Buffer, type: string) {
+  if (type === "image/jpeg") return bytes.length >= 4 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  if (type === "image/png") return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  return type === "image/webp" && bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP";
+}
+
+export async function getVerificationImageUrl(file: { objectKey: string; contentType: string }) {
+  getStorage();
+  return getSignedUrl(uploadClient!, new GetObjectCommand({ Bucket: env.S3_DOCUMENT_BUCKET, Key: file.objectKey,
+    ResponseContentType: file.contentType, ResponseContentDisposition: "inline", ResponseCacheControl: "private, no-store" }), { expiresIn: 60 });
+}
+
 export async function cleanupOrphanedObjects(now = new Date()) {
   if (!storageConfigured) return;
   const { client: s3, bucket } = getStorage();
   const cutoff = now.getTime() - 86_400_000;
-  for (const [targetBucket, prefix] of [[bucket, "pets/"], [bucket, "sitters/"], [bucket, "users/"], [env.S3_DOCUMENT_BUCKET, "documents/"]] as const) {
+  for (const [targetBucket, prefix] of [[bucket, "pets/"], [bucket, "sitters/"], [bucket, "users/"], [env.S3_DOCUMENT_BUCKET, "documents/"], [env.S3_DOCUMENT_BUCKET, "sitter-verification/"]] as const) {
     let token: string | undefined;
     do {
       const page = await s3.send(new ListObjectsV2Command({ Bucket: targetBucket, Prefix: prefix, ContinuationToken: token, MaxKeys: 100 }));
       for (const object of page.Contents ?? []) {
         if (!object.Key || !object.LastModified || object.LastModified.getTime() > cutoff) continue;
-        const referenced = prefix === "documents/"
-          ? await prisma.petDocument.count({ where: { objectKey: object.Key } })
-          : prefix === "pets/" ? await prisma.pet.count({ where: { photoKey: object.Key } })
+        const referenced = prefix === "sitter-verification/"
+          ? await prisma.sitterVerificationFile.count({ where: { OR: [{ stagingKey: object.Key }, { objectKey: object.Key }] } })
+          : prefix === "documents/"
+          ? await prisma.petDocument.count({ where: { OR: [{ objectKey: object.Key }, { stagingKey: object.Key }] } })
+          : prefix === "pets/" ? await prisma.pet.count({ where: { OR: [{ photoKey: object.Key }, { photoKeys: { has: object.Key } }] } })
             : prefix === "users/" ? await prisma.userProfile.count({ where: { photoKey: object.Key } })
               : await prisma.sitterProfile.count({ where: { photoKey: object.Key } });
         if (!referenced) await s3.send(new DeleteObjectCommand({ Bucket: targetBucket, Key: object.Key }));

@@ -74,7 +74,7 @@ export async function openConversation(accountId: string, role: AccountRole, inp
       if (!booking) throw new AppError(404, "Nie znaleziono rezerwacji.", "BOOKING_NOT_FOUND");
       recipientId = booking.ownerAccountId === accountId ? booking.sitterAccountId : booking.ownerAccountId;
     } else {
-      const sitter = await tx.sitterProfile.findFirst({ where: { id: input.sitterProfileId, isActive: true,
+      const sitter = await tx.sitterProfile.findFirst({ where: { id: input.sitterProfileId, isActive: true, verificationStatus: "VERIFIED",
         account: { role: "USER", blockedAt: null, deactivatedAt: null, emailVerifiedAt: { not: null } } }, select: { accountId: true } });
       if (!sitter) throw new AppError(404, "Opiekun jest niedostępny.", "SITTER_NOT_FOUND");
       recipientId = sitter.accountId;

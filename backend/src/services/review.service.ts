@@ -53,7 +53,7 @@ export async function createReview(accountId: string, role: AccountRole, booking
 }
 
 export async function publicSitterReviews(profileId: string, input: z.infer<typeof listReviewsSchema>) {
-  const profile = await prisma.sitterProfile.findFirst({ where: { id: profileId,
+  const profile = await prisma.sitterProfile.findFirst({ where: { id: profileId, verificationStatus: "VERIFIED",
     account: { role: "USER", blockedAt: null, deactivatedAt: null, emailVerifiedAt: { not: null } } },
     select: { id: true, accountId: true, photoKey: true, city: true, account: { select: { userProfile: { select: { fullName: true } } } } } });
   if (!profile) throw new AppError(404, "Nie znaleziono opiekuna.", "SITTER_NOT_FOUND");

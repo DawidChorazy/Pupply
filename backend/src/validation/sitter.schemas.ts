@@ -80,11 +80,17 @@ export const searchSittersSchema = z
     longitude: z.coerce.number().min(-180).max(180),
     radiusKm: z.coerce.number().positive().max(100).default(25),
     minRating: z.coerce.number().min(1).max(5).optional(),
+    minPriceCents: z.coerce.number().int().min(0).max(10_000_000).optional(),
+    maxPriceCents: z.coerce.number().int().min(0).max(10_000_000).optional(),
+    minCompletedWalks: z.coerce.number().int().min(0).max(1_000_000).optional(),
     serviceType: z.enum(["DOG_WALK", "DROP_IN", "DAY_CARE"]).optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
     page: z.coerce.number().int().positive().default(1),
     pageSize: z.coerce.number().int().min(1).max(50).default(20)
+  })
+  .refine(data => data.minPriceCents === undefined || data.maxPriceCents === undefined || data.minPriceCents <= data.maxPriceCents, {
+    path: ["maxPriceCents"], message: "Maksymalna cena nie może być niższa od minimalnej"
   })
   .refine((data) => Boolean(data.from) === Boolean(data.to), {
     message: "Both from and to are required for availability filtering"

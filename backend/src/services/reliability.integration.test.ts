@@ -1,3 +1,4 @@
+import { completePetFixture } from "../test-fixtures";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -19,14 +20,14 @@ async function user(verified = true) {
 }
 async function fixture() {
   const owner = await user(), sitter = await user();
-  const pet = await prisma.pet.create({ data: { accountId: owner.id, name: "Figa", gender: "FEMALE" } });
-  const profile = await prisma.sitterProfile.create({ data: {
+  const pet = await prisma.pet.create({ data: { ...completePetFixture(), accountId: owner.id, name: "Figa", gender: "FEMALE" } });
+  const profile = await prisma.sitterProfile.create({ data: { verificationStatus: "VERIFIED",
     accountId: sitter.id, bio: "Opieka testowa nad zwierzętami", city: "Warszawa", latitude: 52.23, longitude: 21.01,
     services: { create: { type: "DOG_WALK", durationMinutes: 30, priceCents: 3000 } }
   }, include: { services: true } });
   const startsAt = new Date(Date.now() + 48 * 3_600_000);
   const slot = await prisma.availabilitySlot.create({ data: { sitterProfileId: profile.id, startsAt, endsAt: new Date(startsAt.getTime() + 90 * 60_000) } });
-  const payload = { petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id };
+  const payload = { petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id };
   return { owner, sitter, pet, profile, slot, payload };
 }
 afterEach(async () => {

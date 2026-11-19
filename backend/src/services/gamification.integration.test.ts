@@ -112,7 +112,7 @@ describe("persistent gamification", () => {
       data: { accountId: owner.id, name: "Luna", gender: "FEMALE" }
     });
     const profile = await prisma.sitterProfile.create({
-      data: {
+      data: { verificationStatus: "VERIFIED",
         accountId: sitter.id,
         bio: "Opieka",
         city: "Warszawa",
@@ -140,7 +140,7 @@ describe("persistent gamification", () => {
       ownerAccountId: owner.id,
       sitterAccountId: sitter.id,
       petId: pet.id,
-      sitterServiceId: service.id,
+      pickupAddress: "Warszawa, Testowa 1", sitterServiceId: service.id,
       availabilitySlotId: slot.id,
       priceCents: 1000,
       startsAt: new Date("2026-01-01T10:00:00Z"),
@@ -174,7 +174,7 @@ describe("persistent gamification", () => {
     await prisma.booking.createMany({
       data: Array.from({ length: 4 }, () => ({
         ...base,
-        sitterServiceId: walk.id,
+        pickupAddress: "Warszawa, Testowa 1", sitterServiceId: walk.id,
         status: "COMPLETED" as const
       }))
     });

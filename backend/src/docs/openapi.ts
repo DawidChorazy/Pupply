@@ -3,6 +3,10 @@ import { petSharingPaths, petSharingSchemas } from "./pet-sharing-openapi";
 import { clinicVerificationPaths, clinicVerificationSchemas } from "./clinic-verification-openapi";
 import { chatPaths, chatSchemas } from "./chat-openapi";
 import { reviewPaths, reviewSchemas } from "./reviews-openapi";
+import { walkPaths, walkSchemas } from "./walk-openapi";
+import { sitterVerificationPaths, sitterVerificationSchemas } from "./sitter-verification-openapi";
+import { paymentPaths, paymentSchemas } from "./payments-openapi";
+import { issuePaths, issueSchemas } from "./issues-openapi";
 
 const jsonBody = (schema: object) => ({
   required: true,
@@ -46,6 +50,10 @@ export const openApiSpec = {
   },
   servers: [{ url: "http://localhost:4000", description: "Local development" }],
   tags: [
+    { name: "Issues" },
+    { name: "Payments" },
+    { name: "Walk GPS" },
+    { name: "Sitter verification" },
     { name: "Reviews" },
     { name: "Chat" },
     { name: "Pet sharing" },
@@ -64,6 +72,10 @@ export const openApiSpec = {
     { name: "Gamification" }
   ],
   paths: {
+    ...issuePaths,
+    ...paymentPaths,
+    ...walkPaths,
+    ...sitterVerificationPaths,
     ...reviewPaths,
     ...chatPaths,
     ...clinicVerificationPaths,
@@ -207,6 +219,9 @@ export const openApiSpec = {
           { name: "longitude", in: "query", required: true, schema: { type: "number" } },
           { name: "radiusKm", in: "query", schema: { type: "number", default: 25 } },
           { name: "serviceType", in: "query", schema: { $ref: "#/components/schemas/ServiceType" } },
+          { name: "minPriceCents", in: "query", schema: { type: "integer", minimum: 0, maximum: 10000000 }, description: "Minimum price of the matching service variant, in grosze." },
+          { name: "maxPriceCents", in: "query", schema: { type: "integer", minimum: 0, maximum: 10000000 }, description: "Maximum variant price, before pagination." },
+          { name: "minCompletedWalks", in: "query", schema: { type: "integer", minimum: 0, maximum: 1000000 }, description: "Minimum completed DOG_WALK bookings which have ended, before pagination." },
           { name: "minRating", in: "query", schema: { type: "number", minimum: 1, maximum: 5 }, description: "Minimum average rating, rounded to two decimals. Unrated sitters are excluded only when this filter is set. Applied before pagination; results remain ordered by distance." },
           { name: "from", in: "query", schema: { type: "string", format: "date-time" } },
           { name: "to", in: "query", schema: { type: "string", format: "date-time" } },
@@ -265,7 +280,11 @@ export const openApiSpec = {
       }
     },
     "/api/bookings/{bookingId}": {
-      get: { tags: ["Bookings"], summary: "Get participant booking", security: bearer, parameters: [idParameter("bookingId")], responses: { "200": jsonResponse("Booking", { $ref: "#/components/schemas/BookingEnvelope" }), ...standardErrors } }
+      get: {
+        tags: ["Bookings"], summary: "Get participant booking", security: bearer, parameters: [idParameter("bookingId")],
+        description: "For an ACCEPTED booking, both participants see the current temperament, mobility restrictions and care instructions in booking.pet. An unfilled field is null. Other statuses return the pet ID, name and breed.",
+        responses: { "200": jsonResponse("Booking details", { $ref: "#/components/schemas/BookingDetailEnvelope" }), ...standardErrors }
+      }
     },
     "/api/bookings/batch": {
       post: { tags: ["Bookings"], security: bearer, parameters: [operationHeader], summary: "Atomically reserve up to 28 appointments with a shared pet, service and duration; any conflict rolls back appointments, notifications and the operation key", requestBody: jsonBody({ $ref: "#/components/schemas/BatchBookingRequest" }), responses: { "201": jsonResponse("Created or replayed", { type: "object", properties: { bookings: { type: "array", items: { $ref: "#/components/schemas/Booking" } }, totalPriceCents: { type: "integer" } } }), ...standardErrors } }
@@ -276,7 +295,7 @@ export const openApiSpec = {
     "/api/bookings/{bookingId}/status": {
       patch: {
         tags: ["Bookings"], summary: "Accept, reject, cancel or complete booking", security: bearer, parameters: [idParameter("bookingId")],
-        requestBody: jsonBody({ type: "object", required: ["status"], properties: { status: { type: "string", enum: ["ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED"] } } }),
+        requestBody: jsonBody({ type: "object", required: ["status"], properties: { status: { type: "string", enum: ["ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED"] }, expectedCancellationFeeCents: { type: "integer", minimum: 0, description: "Required when cancellation incurs a fee; obtain a fresh cancellation quote first." } } }),
         responses: { "200": jsonResponse("Updated", { $ref: "#/components/schemas/BookingEnvelope" }), ...standardErrors }
       }
     },
@@ -314,6 +333,10 @@ export const openApiSpec = {
       StorageUnavailable: jsonResponse("Object storage unavailable", { $ref: "#/components/schemas/Error" })
     },
     schemas: {
+      ...issueSchemas,
+      ...paymentSchemas,
+      ...walkSchemas,
+      ...sitterVerificationSchemas,
       ...reliabilitySchemas,
       ...clinicVerificationSchemas,
       ...chatSchemas,
@@ -336,9 +359,9 @@ export const openApiSpec = {
       ActionTokenPasswordRequest: { type: "object", required: ["token", "password", "confirmPassword"], properties: { token: { type: "string" }, password: { type: "string", format: "password" }, confirmPassword: { type: "string", format: "password" } } },
       AuthResponse: { type: "object", required: ["accessToken", "refreshToken", "account"], properties: { accessToken: { type: "string" }, refreshToken: { type: "string" }, account: { type: "object", additionalProperties: true } } },
       ProfileEnvelope: { type: "object", required: ["profile"], properties: { profile: { type: "object", additionalProperties: true } } },
-      PetInput: { type: "object", required: ["name", "gender"], properties: { name: { type: "string" }, age: { type: "integer" }, breed: { type: "string" }, weight: { type: "number" }, gender: { type: "string", enum: ["MALE", "FEMALE"] }, photoKey: { type: "string" }, illnesses: { type: "string" }, allergies: { type: "string" }, vaccines: { type: "string" }, vet: { type: "string" }, notes: { type: "string" } } },
+      PetInput: { type: "object", required: ["name", "gender"], properties: { size: { type: "string", enum: ["SMALL", "MEDIUM", "LARGE"] }, temperament: { type: "string", maxLength: 1000 }, mobilityRestrictions: { type: "string", maxLength: 2000 }, careInstructions: { type: "string", maxLength: 2000 }, photoKeys: { type: "array", maxItems: 8, uniqueItems: true, items: { type: "string" } }, name: { type: "string" }, age: { type: "integer" }, breed: { type: "string" }, weight: { type: "number" }, gender: { type: "string", enum: ["MALE", "FEMALE"] }, photoKey: { type: "string" }, illnesses: { type: "string" }, allergies: { type: "string" }, vaccines: { type: "string" }, vet: { type: "string" }, notes: { type: "string" } } },
       PetUpdateInput: { type: "object", minProperties: 1, properties: { name: { type: "string" }, age: { type: "integer" }, breed: { type: "string" }, weight: { type: "number" }, gender: { type: "string", enum: ["MALE", "FEMALE"] }, photoKey: { type: "string" }, illnesses: { type: "string" }, allergies: { type: "string" }, vaccines: { type: "string" }, vet: { type: "string" }, notes: { type: "string" } } },
-      Pet: { allOf: [{ $ref: "#/components/schemas/PetInput" }, { type: "object", required: ["id", "accountId", "createdAt", "updatedAt"], properties: { id: { type: "string" }, accountId: { type: "string" }, photoUrl: { type: "string", format: "uri", nullable: true }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } }] },
+      Pet: { type: "object", required: ["id", "accountId", "name", "gender", "createdAt", "updatedAt"], properties: { id: { type: "string" }, accountId: { type: "string" }, name: { type: "string" }, breed: { type: "string", nullable: true }, temperament: { type: "string", nullable: true }, mobilityRestrictions: { type: "string", nullable: true }, careInstructions: { type: "string", nullable: true }, photoKey: { type: "string", nullable: true }, illnesses: { type: "string", nullable: true }, allergies: { type: "string", nullable: true }, vaccines: { type: "string", nullable: true }, vet: { type: "string", nullable: true }, notes: { type: "string", nullable: true }, age: { type: "integer", nullable: true }, weight: { type: "number", nullable: true }, gender: { type: "string", enum: ["MALE", "FEMALE"] }, size: { type: "string", enum: ["SMALL", "MEDIUM", "LARGE"], nullable: true }, photoUrl: { type: "string", format: "uri", nullable: true }, photoKeys: { type: "array", items: { type: "string" } }, photos: { type: "array", items: { type: "object", properties: { photoKey: { type: "string" }, photoUrl: { type: "string", format: "uri" } } } }, missingFields: { type: "array", items: { type: "string" }, description: "Fields required before booking; vaccination proof is checked again for the service day." }, createdAt: { type: "string", format: "date-time" }, updatedAt: { type: "string", format: "date-time" } } },
       PetEnvelope: { type: "object", required: ["pet"], properties: { pet: { $ref: "#/components/schemas/Pet" } } },
       UploadResponse: { type: "object", required: ["uploadUrl", "photoKey", "expiresIn"], properties: { uploadUrl: { type: "string", format: "uri" }, photoKey: { type: "string" }, expiresIn: { type: "integer" } } },
       ServiceType: { type: "string", enum: ["DOG_WALK", "DROP_IN", "DAY_CARE"], description: "DOG_WALK: a walk; DROP_IN: care at the pet owner's home; DAY_CARE: care at the sitter's home, with the owner bringing and collecting the pet. These care types differ by location, not duration; duration can be extended within availability." },
@@ -351,10 +374,21 @@ export const openApiSpec = {
       SitterSearchItem: { type: "object", required: ["id", "displayName", "bio", "city", "distanceKm", "services", "availability", "ratingSummary"], properties: { id: { type: "string" }, displayName: { type: "string" }, bio: { type: "string" }, city: { type: "string" }, region: { type: "string", nullable: true }, photoUrl: { type: "string", format: "uri", nullable: true }, serviceRadiusKm: { type: "integer" }, distanceKm: { type: "number" }, ratingSummary: { $ref: "#/components/schemas/ReviewSummary" }, services: { type: "array", items: { $ref: "#/components/schemas/SitterService" } }, availability: { type: "array", description: "Free future intervals after subtracting active bookings. Multiple intervals may have the same slot ID; pass startsAt when booking. Exact sitter coordinates are intentionally omitted.", items: { $ref: "#/components/schemas/AvailabilitySlot" } } } },
       PaginatedSitters: { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/SitterSearchItem" } }, pagination: { $ref: "#/components/schemas/Pagination" } } },
       BookingStatus: { type: "string", enum: ["REQUESTED", "ACCEPTED", "REJECTED", "CANCELLED", "COMPLETED", "EXPIRED"] },
-      BookingRequest: { type: "object", required: ["petId", "sitterServiceId", "availabilitySlotId"], properties: { petId: { type: "string" }, sitterServiceId: { type: "string" }, availabilitySlotId: { type: "string" }, startsAt: { type: "string", format: "date-time" }, durationMinutes: { type: "integer", minimum: 15, maximum: 1440, description: "Defaults to the service duration, which is also the minimum. Price is rounded to cents from service price × requested duration / service duration." }, expectedPriceCents: { type: "integer", minimum: 0, maximum: 2147483647, description: "Optional quote per appointment; a mismatch returns PRICE_CHANGED without creating a booking." }, note: { type: "string" } } },
-      BatchBookingRequest: { type: "object", required: ["petId", "sitterServiceId", "slots"], properties: { petId: { type: "string" }, sitterServiceId: { type: "string" }, durationMinutes: { type: "integer", minimum: 15, maximum: 1440 }, expectedPriceCents: { type: "integer", minimum: 0, maximum: 2147483647, description: "Expected price of one appointment, not the total." }, note: { type: "string", maxLength: 1000 }, slots: { type: "array", minItems: 1, maxItems: 28, items: { type: "object", required: ["availabilitySlotId", "startsAt"], properties: { availabilitySlotId: { type: "string" }, startsAt: { type: "string", format: "date-time" } } } } } },
-      Booking: { type: "object", required: ["id", "status", "priceCents", "currency"], properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/BookingStatus" }, startsAt: { type: "string", format: "date-time" }, endsAt: { type: "string", format: "date-time" }, expiresAt: { type: "string", format: "date-time" }, priceCents: { type: "integer" }, currency: { type: "string", enum: ["PLN"] }, note: { type: "string", nullable: true }, review: { allOf: [{ $ref: "#/components/schemas/SitterReview" }], nullable: true }, pet: { type: "object", additionalProperties: true }, sitterService: { type: "object", additionalProperties: true }, availabilitySlot: { type: "object", additionalProperties: true } } },
+      BookingRequest: { type: "object", required: ["pickupAddress", "petId", "sitterServiceId", "availabilitySlotId"], properties: { pickupAddress: { type: "string", minLength: 5, maxLength: 500, description: "Private handover address, snapshotted at booking creation. Complete pet profile and vaccination proof valid on the service day are required." }, petId: { type: "string" }, sitterServiceId: { type: "string" }, availabilitySlotId: { type: "string" }, startsAt: { type: "string", format: "date-time" }, durationMinutes: { type: "integer", minimum: 15, maximum: 1440, description: "Defaults to the service duration, which is also the minimum. Price is rounded to cents from service price × requested duration / service duration." }, expectedPriceCents: { type: "integer", minimum: 0, maximum: 2147483647, description: "Optional quote per appointment; a mismatch returns PRICE_CHANGED without creating a booking." }, note: { type: "string" } } },
+      BatchBookingRequest: { type: "object", required: ["pickupAddress", "petId", "sitterServiceId", "slots"], properties: { pickupAddress: { type: "string", minLength: 5, maxLength: 500, description: "Private handover address, snapshotted at booking creation. Complete pet profile and vaccination proof valid on the service day are required." }, petId: { type: "string" }, sitterServiceId: { type: "string" }, durationMinutes: { type: "integer", minimum: 15, maximum: 1440 }, expectedPriceCents: { type: "integer", minimum: 0, maximum: 2147483647, description: "Expected price of one appointment, not the total." }, note: { type: "string", maxLength: 1000 }, slots: { type: "array", minItems: 1, maxItems: 28, items: { type: "object", required: ["availabilitySlotId", "startsAt"], properties: { availabilitySlotId: { type: "string" }, startsAt: { type: "string", format: "date-time" } } } } } },
+      Booking: { type: "object", required: ["id", "status", "priceCents", "currency"], properties: { pickupAddress: { type: "string", nullable: true, description: "Null for legacy bookings" }, issue: { type: "object", nullable: true, properties: { id: { type: "string" }, status: { $ref: "#/components/schemas/BookingIssueStatus" } } }, paymentRequired: { type: "boolean" }, paymentDueAt: { type: "string", format: "date-time", nullable: true }, paidPaymentId: { type: "string", nullable: true }, cancellationFeeCents: { type: "integer", minimum: 0 }, payments: { type: "array", maxItems: 5, items: { $ref: "#/components/schemas/PaymentSummary" } }, settlement: { allOf: [{ $ref: "#/components/schemas/PaymentSettlement" }], nullable: true }, walkSession: { allOf: [{ $ref: "#/components/schemas/WalkSession" }], nullable: true }, id: { type: "string" }, status: { $ref: "#/components/schemas/BookingStatus" }, startsAt: { type: "string", format: "date-time" }, endsAt: { type: "string", format: "date-time" }, expiresAt: { type: "string", format: "date-time" }, priceCents: { type: "integer" }, currency: { type: "string", enum: ["PLN"] }, note: { type: "string", nullable: true }, review: { allOf: [{ $ref: "#/components/schemas/SitterReview" }], nullable: true }, pet: { type: "object", additionalProperties: true }, sitterService: { type: "object", additionalProperties: true }, availabilitySlot: { type: "object", additionalProperties: true } } },
       BookingEnvelope: { type: "object", required: ["booking"], properties: { booking: { $ref: "#/components/schemas/Booking" } } },
+      BookingDetailEnvelope: {
+        type: "object", required: ["booking"], properties: {
+          booking: { allOf: [{ $ref: "#/components/schemas/Booking" }, { type: "object", required: ["pet"], properties: {
+            pet: { type: "object", required: ["id", "name", "breed"], properties: {
+              id: { type: "string" }, name: { type: "string" }, breed: { type: "string", nullable: true },
+              temperament: { type: "string", nullable: true }, mobilityRestrictions: { type: "string", nullable: true },
+              careInstructions: { type: "string", nullable: true }
+            } }
+          } }] }
+        }
+      },
       PaginatedBookings: { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/Booking" } }, pagination: { $ref: "#/components/schemas/Pagination" } } },
       Notification: { type: "object", required: ["id", "type", "title", "message", "createdAt"], properties: { id: { type: "string" }, bookingId: { type: "string", nullable: true }, conversationId: { type: "string", nullable: true }, chatMessageId: { type: "string", nullable: true }, type: { type: "string" }, title: { type: "string" }, message: { type: "string" }, readAt: { type: "string", format: "date-time", nullable: true }, createdAt: { type: "string", format: "date-time" } } },
       PaginatedNotifications: { type: "object", required: ["items", "pagination"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/Notification" } }, pagination: { $ref: "#/components/schemas/Pagination" } } },

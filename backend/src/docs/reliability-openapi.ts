@@ -4,7 +4,7 @@ const body = (schema: object) => ({ required: true, content: { "application/json
 const response = (schema: object) => ({ description: "Success", content: { "application/json": { schema } } });
 const errors = Object.fromEntries([400, 401, 403, 404, 409, 413, 429, 503].map(status => [String(status), { description: "Request failed", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } }]));
 const actionResponse = response({ type: "object", properties: { accepted: { type: "boolean" }, debugToken: { type: "string", description: "Development/test only" } } });
-const documentMeta = { type: "object", properties: { expiresAt: { type: "string", format: "date", nullable: true }, reminderDaysBefore: { type: "integer", minimum: 0, maximum: 365 } } };
+const documentMeta = { type: "object", properties: { purpose: { type: "string", enum: ["GENERAL", "VACCINATION"] }, expiresAt: { type: "string", format: "date", nullable: true }, reminderDaysBefore: { type: "integer", minimum: 0, maximum: 365 } } };
 const petParameters = [parameter("petId")];
 const documentParameters = [...petParameters, parameter("documentId")];
 const preferences = { type: "object", required: ["emailNotifications"], properties: { emailNotifications: { type: "boolean" } } };
@@ -12,14 +12,14 @@ const deviceBody = body({ type: "object", required: ["token"], properties: { tok
 
 export const reliabilityPaths = {
   "/api/pets/{petId}/documents": {
-    get: { tags: ["Documents"], security: bearer, parameters: petParameters, summary: "List completed PDF uploads owned by the current account", responses: { "200": response({ type: "object", properties: { documents: { type: "array", items: { $ref: "#/components/schemas/PetDocument" } } } }), ...errors } }
+    get: { tags: ["Documents"], security: bearer, parameters: petParameters, summary: "List completed PDF/image uploads owned by the current account", responses: { "200": response({ type: "object", properties: { documents: { type: "array", items: { $ref: "#/components/schemas/PetDocument" } } } }), ...errors } }
   },
   "/api/pets/{petId}/documents/upload": {
-    post: { tags: ["Documents"], security: bearer, parameters: petParameters, summary: "Prepare a private PDF upload; upload to the returned URL, then PATCH to confirm", requestBody: body({ type: "object", required: ["name", "sizeBytes"], properties: { name: { type: "string", maxLength: 255 }, sizeBytes: { type: "integer", minimum: 1, description: "Limited by DOCUMENT_MAX_BYTES (10 MB by default)" } } }), responses: { "201": response({ type: "object", properties: { document: { $ref: "#/components/schemas/PetDocument" }, uploadUrl: { type: "string", format: "uri" }, expiresIn: { type: "integer" } } }), ...errors } }
+    post: { tags: ["Documents"], security: bearer, parameters: petParameters, summary: "Prepare a private PDF/image upload; upload to the returned URL, then PATCH to confirm", requestBody: body({ type: "object", required: ["name", "sizeBytes"], properties: { contentType: { type: "string", enum: ["application/pdf", "image/jpeg", "image/png", "image/webp"], default: "application/pdf" }, purpose: { type: "string", enum: ["GENERAL", "VACCINATION"], default: "GENERAL" }, name: { type: "string", maxLength: 255 }, sizeBytes: { type: "integer", minimum: 1, description: "Limited by DOCUMENT_MAX_BYTES (10 MB by default)" } } }), responses: { "201": response({ type: "object", properties: { document: { $ref: "#/components/schemas/PetDocument" }, uploadUrl: { type: "string", format: "uri" }, expiresIn: { type: "integer" } } }), ...errors } }
   },
   "/api/pets/{petId}/documents/{documentId}": {
-    patch: { tags: ["Documents"], security: bearer, parameters: documentParameters, summary: "Confirm PDF signature/size/type and save expiration/reminder settings", requestBody: body(documentMeta), responses: { "200": response({ type: "object", properties: { document: { $ref: "#/components/schemas/PetDocument" } } }), ...errors } },
-    delete: { tags: ["Documents"], security: bearer, parameters: documentParameters, summary: "Delete PDF from private storage and database", responses: { "204": { description: "Deleted" }, ...errors } }
+    patch: { tags: ["Documents"], security: bearer, parameters: documentParameters, summary: "Confirm and seal PDF/image bytes, size and type and save expiration/reminder settings", requestBody: body(documentMeta), responses: { "200": response({ type: "object", properties: { document: { $ref: "#/components/schemas/PetDocument" } } }), ...errors } },
+    delete: { tags: ["Documents"], security: bearer, parameters: documentParameters, summary: "Delete document from private storage and database", responses: { "204": { description: "Deleted" }, ...errors } }
   },
   "/api/pets/{petId}/documents/{documentId}/download": {
     get: { tags: ["Documents"], security: bearer, parameters: documentParameters, summary: "Get an authorized download URL valid for 300 seconds", responses: { "200": response({ type: "object", properties: { url: { type: "string", format: "uri" }, expiresIn: { type: "integer" } } }), ...errors } }
@@ -59,7 +59,7 @@ export const reliabilityPaths = {
 };
 export const reliabilitySchemas = {
   PetDocument: { type: "object", required: ["id", "petId", "name", "sizeBytes", "reminderDaysBefore"], properties: {
-    id: { type: "string" }, petId: { type: "string" }, name: { type: "string" }, sizeBytes: { type: "integer" },
+    contentType: { type: "string" }, purpose: { type: "string", enum: ["GENERAL", "VACCINATION"] }, id: { type: "string" }, petId: { type: "string" }, name: { type: "string" }, sizeBytes: { type: "integer" },
     expiresAt: { type: "string", format: "date-time", nullable: true }, reminderDaysBefore: { type: "integer" },
     uploadedAt: { type: "string", format: "date-time", nullable: true }, createdAt: { type: "string", format: "date-time" }
   } }

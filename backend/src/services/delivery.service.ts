@@ -49,7 +49,8 @@ export async function deliverNotifications(now = new Date()) {
         const response = await fetch("https://exp.host/--/api/v2/push/send", {
           method: "POST", headers: pushHeaders(), signal: AbortSignal.timeout(10_000),
           body: JSON.stringify({ to: job.destination, title: "Pupply", body: "Masz nowe powiadomienie w aplikacji.",
-            data: { notificationId: job.notificationId, accountId: account.id,
+            data: { notificationId: job.notificationId, accountId: account.id, type: job.notification.type,
+              ...(job.notification.bookingId ? { bookingId: job.notification.bookingId } : {}),
               ...(job.notification.conversationId ? { conversationId: job.notification.conversationId } : {}) }, sound: "default" })
         });
         if (!response.ok) throw new Error("Push provider unavailable");

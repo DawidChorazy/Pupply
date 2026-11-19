@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import { AppError } from "./app-error";
 
 export function isTransactionContention(error: unknown): boolean {
+  // The Postgres driver may wrap exclusion-index deadlocks as an unknown error.
+  if (error instanceof Prisma.PrismaClientUnknownRequestError && /code: "(?:40001|40P01)"/.test(error.message)) return true;
   return error instanceof Prisma.PrismaClientKnownRequestError && (
     error.code === "P2034"
     || (error.code === "P2010" && ["40001", "40P01"].includes(String(error.meta?.code)))

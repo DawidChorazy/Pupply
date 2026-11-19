@@ -78,10 +78,10 @@ export async function getSharedPetCard(token: string | undefined) {
 export async function downloadSharedPetDocument(token: string | undefined, documentId: string) {
   const share = await validShare(token);
   if (!share.includeDocuments) throw unavailable();
-  const document = await prisma.petDocument.findFirst({ where: { id: documentId, petId: share.petId, uploadedAt: { not: null } }, select: { objectKey: true } });
+  const document = await prisma.petDocument.findFirst({ where: { id: documentId, petId: share.petId, uploadedAt: { not: null } }, select: { objectKey: true, contentType: true } });
   if (!document) throw unavailable();
   // A URL never outlives the share itself. Revocation stops issuing further URLs.
   const expiresIn = Math.min(60, Math.floor((share.expiresAt.getTime() - Date.now()) / 1000));
   if (expiresIn < 1) throw unavailable();
-  return { url: await getDocumentUrl(document.objectKey, expiresIn), expiresIn };
+  return { url: await getDocumentUrl(document.objectKey, expiresIn, document.contentType), expiresIn };
 }

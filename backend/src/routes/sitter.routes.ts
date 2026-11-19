@@ -1,4 +1,7 @@
 import { Router } from "express";
+import { createAuthRateLimiter } from "../middleware/rate-limit";
+import { getOwnSitterVerification, createSitterVerificationFile, completeSitterVerificationFile, deleteSitterVerificationFile, submitSitterVerification, readSitterVerificationFile } from "../services/sitter-verification.service";
+import { submitSitterVerificationSchema, verificationFileSchema } from "../validation/sitter-verification.schemas";
 import { rateLimit } from "express-rate-limit";
 import { publicSitterReviews } from "../services/review.service";
 import { listReviewsSchema } from "../validation/review.schemas";
@@ -31,6 +34,28 @@ import {
 } from "../validation/sitter.schemas";
 
 const sitterRouter = Router();
+const verificationRouter = Router();
+verificationRouter.use(requireAuth, (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+verificationRouter.use(createAuthRateLimiter({ windowMs: 60_000, limit: 60, keyGenerator: req => req.auth!.accountId }));
+verificationRouter.get("/", asyncHandler(async (req, res) => {
+  res.json(await getOwnSitterVerification(req.auth!.accountId, req.auth!.role));
+}));
+verificationRouter.post("/", createAuthRateLimiter({ limit: 10, keyGenerator: req => req.auth!.accountId }), asyncHandler(async (req, res) => {
+  res.status(202).json({ verification: await submitSitterVerification(req.auth!.accountId, req.auth!.role, submitSitterVerificationSchema.parse(req.body)) });
+}));
+verificationRouter.post("/files", createAuthRateLimiter({ limit: 20, keyGenerator: req => req.auth!.accountId }), asyncHandler(async (req, res) => {
+  res.status(201).json(await createSitterVerificationFile(req.auth!.accountId, req.auth!.role, verificationFileSchema.parse(req.body)));
+}));
+verificationRouter.post("/files/:fileId/complete", asyncHandler(async (req, res) => {
+  res.json({ file: await completeSitterVerificationFile(req.auth!.accountId, req.auth!.role, String(req.params.fileId)) });
+}));
+verificationRouter.get("/files/:fileId", asyncHandler(async (req, res) => {
+  res.json(await readSitterVerificationFile(req.auth!.accountId, req.auth!.role, req.auth!.accountId, String(req.params.fileId)));
+}));
+verificationRouter.delete("/files/:fileId", asyncHandler(async (req, res) => {
+  await deleteSitterVerificationFile(req.auth!.accountId, req.auth!.role, String(req.params.fileId)); res.status(204).send();
+}));
+sitterRouter.use("/me/verification", verificationRouter);
 sitterRouter.get("/:profileId/reviews", rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: "draft-8", legacyHeaders: false,
   handler: (_req, res) => res.status(429).json({ error: "RATE_LIMITED", message: "Zbyt wiele zapytań o opinie. Spróbuj ponownie za chwilę." }) }), asyncHandler(async (req, res) => {
   res.setHeader("Cache-Control", "no-store");

@@ -3,6 +3,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { app } from "./app";
 import { prisma } from "./config/prisma";
+import { completePetFixture } from "./test-fixtures";
+import { cleanupOrphanedObjects } from "./services/storage.service";
 
 const password = "Strong@Test1";
 
@@ -122,6 +124,7 @@ describe("API integration", () => {
       .post("/api/pets")
       .set("Authorization", `Bearer ${owner.accessToken}`)
       .send({ name: "Figa", gender: "FEMALE" });
+    await prisma.pet.update({ where: { id: petResponse.body.pet.id }, data: completePetFixture() });
     const sitterProfile = await request(app)
       .post("/api/sitters/me")
       .set("Authorization", `Bearer ${sitter.accessToken}`)
@@ -134,6 +137,7 @@ describe("API integration", () => {
         services: [{ type: "DOG_WALK", durationMinutes: 60, priceCents: 5000 }]
       });
     expect(sitterProfile.status).toBe(201);
+    await prisma.sitterProfile.update({ where: { accountId: sitter.account.id }, data: { verificationStatus: "VERIFIED" } });
     const serviceId = sitterProfile.body.profile.services[0].id;
     const startsAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
     const endsAt = new Date(startsAt.getTime() + 90 * 60 * 1000);
@@ -156,7 +160,7 @@ describe("API integration", () => {
 
     const bookingPayload = {
       petId: petResponse.body.pet.id,
-      sitterServiceId: serviceId,
+      pickupAddress: "Warszawa, Testowa 1", sitterServiceId: serviceId,
       availabilitySlotId: slot.body.slot.id
     };
     const booking = await request(app)
@@ -205,6 +209,9 @@ describe("API integration", () => {
     expect(pet.body.pet.photoUrl).toContain(signed.body.photoKey);
     expect((await fetch(pet.body.pet.photoUrl)).status).toBe(200);
     expect((await request(app).delete(`/api/pets/${pet.body.pet.id}`).set("Authorization", `Bearer ${owner.accessToken}`)).status).toBe(204);
+    // Deleting a pet must not delete a photo still referenced by another pet.
+    expect((await fetch(pet.body.pet.photoUrl)).status).toBe(200);
+    await cleanupOrphanedObjects(new Date(Date.now() + 2 * 86_400_000));
     expect((await fetch(pet.body.pet.photoUrl)).status).toBe(404);
   });
 });

@@ -15,7 +15,7 @@ async function account(fullName = "Anna Kowalska", role: "USER" | "CLINIC" = "US
 }
 async function fixture() {
   const owner = await account(), sitter = await account("Piotr Spacerowicz"), stranger = await account("Obca Osoba");
-  const profile = await prisma.sitterProfile.create({ data: { accountId: sitter.id, bio: "Bezpieczne spacery z doświadczonym opiekunem.", city: "Warszawa", latitude: 52, longitude: 21,
+  const profile = await prisma.sitterProfile.create({ data: { verificationStatus: "VERIFIED", accountId: sitter.id, bio: "Bezpieczne spacery z doświadczonym opiekunem.", city: "Warszawa", latitude: 52, longitude: 21,
     services: { create: { type: "DOG_WALK", durationMinutes: 30, priceCents: 3000 } } }, include: { services: true } });
   const now = Date.now();
   const slot = await prisma.availabilitySlot.create({ data: { sitterProfileId: profile.id, startsAt: new Date(now - 3 * 3_600_000), endsAt: new Date(now - 30 * 60_000) } });
@@ -25,7 +25,7 @@ async function fixture() {
     const service = type === "DOG_WALK" ? profile.services[0] : await prisma.sitterService.upsert({ where: { sitterProfileId_type_durationMinutes: { sitterProfileId: profile.id, type, durationMinutes: 30 } },
       create: { sitterProfileId: profile.id, type, durationMinutes: 30, priceCents: 3000 }, update: {} });
     return prisma.booking.create({ data: { ownerAccountId: owner.id, sitterAccountId: sitter.id, petId: pet.id,
-      sitterServiceId: service.id, availabilitySlotId: slot.id, status, startsAt: new Date(now - 2 * 3_600_000), endsAt: new Date(now - 3_600_000), expiresAt: new Date(now - 3_600_000), priceCents: 3000 } });
+      pickupAddress: "Warszawa, Testowa 1", sitterServiceId: service.id, availabilitySlotId: slot.id, status, startsAt: new Date(now - 2 * 3_600_000), endsAt: new Date(now - 3_600_000), expiresAt: new Date(now - 3_600_000), priceCents: 3000 } });
   };
   return { owner, sitter, stranger, profile, booking };
 }

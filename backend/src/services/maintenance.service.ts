@@ -4,6 +4,7 @@ import { expireBookingRequests } from "./booking-expiry.service";
 import { deleteDocumentObject, cleanupOrphanedObjects } from "./storage.service";
 import { enqueueNotifications, deliverNotifications, checkPushReceipts } from "./delivery.service";
 import { recordMaintenance } from "../middleware/metrics";
+import { cleanupExpiredVerificationFiles } from "./sitter-verification.service";
 
 export async function sendDocumentReminders(now = new Date()) {
   const documents = await prisma.$queryRaw<{ id: string; petId: string; name: string; accountId: string; petName: string; expiresAt: Date; reminderDaysBefore: number }[]>`
@@ -36,12 +37,14 @@ export async function runMaintenance(now = new Date()) {
   const pending = await prisma.petDocument.findMany({ where: { uploadedAt: null, createdAt: { lt: new Date(now.getTime() - 86_400_000) } }, take: 100 });
   for (const document of pending) {
     await prisma.$transaction(async tx => {
-      const rows = await tx.$queryRaw<{ objectKey: string; uploadedAt: Date | null }[]>`SELECT "objectKey", "uploadedAt" FROM "PetDocument" WHERE id = ${document.id} FOR UPDATE`;
+      const rows = await tx.$queryRaw<{ objectKey: string; stagingKey: string | null; uploadedAt: Date | null }[]>`SELECT "objectKey", "stagingKey", "uploadedAt" FROM "PetDocument" WHERE id = ${document.id} FOR UPDATE`;
       if (!rows[0] || rows[0].uploadedAt) return;
       await deleteDocumentObject(rows[0].objectKey);
+      if (rows[0].stagingKey) await deleteDocumentObject(rows[0].stagingKey);
       await tx.petDocument.delete({ where: { id: document.id } });
     }, { timeout: 15_000 });
   }
+  await cleanupExpiredVerificationFiles(now);
 }
 
 export function startMaintenance() {

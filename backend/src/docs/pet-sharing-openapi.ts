@@ -33,9 +33,9 @@ export const petSharingPaths = {
     delete: { ...owner, parameters: [...owner.parameters, path("shareId")], summary: "Owner only: revoke a link (idempotent)", responses: { "204": { description: "Revoked" }, ...errors } }
   },
   "/api/shared-pets/card": {
-    get: { ...publicRead, summary: "Read current pet data through an active share; PDFs excluded by default", description: "Invalid, expired, revoked links and disabled owners return the same 404. No caching or indexing.", responses: { "200": json(ref("SharedPetCard")), ...errors } }
+    get: { ...publicRead, summary: "Read current pet data through an active share; Documents excluded by default", description: "Invalid, expired, revoked links and disabled owners return the same 404. No caching or indexing.", responses: { "200": json(ref("SharedPetCard")), ...errors } }
   },
   "/api/shared-pets/documents/{documentId}/download": {
-    get: { ...publicRead, parameters: [...publicRead.parameters, path("documentId")], summary: "Read-only PDF download if the link explicitly includes documents", description: "Returns a private storage URL valid for up to 60 seconds, bounded by the share expiry. Revocation prevents issuing new URLs; it cannot remove saved files or invalidate URLs already issued.", responses: { "200": json({ type: "object", properties: { url: { type: "string", format: "uri" }, expiresIn: { type: "integer", minimum: 1, maximum: 60 } } }), ...errors } }
+    get: { ...publicRead, parameters: [...publicRead.parameters, path("documentId")], summary: "Read-only document download if the link explicitly includes documents", description: "Returns a private storage URL valid for up to 60 seconds, bounded by the share expiry. Revocation prevents issuing new URLs; it cannot remove saved files or invalidate URLs already issued.", responses: { "200": json({ type: "object", properties: { url: { type: "string", format: "uri" }, expiresIn: { type: "integer", minimum: 1, maximum: 60 } } }), ...errors } }
   }
 };

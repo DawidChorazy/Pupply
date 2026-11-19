@@ -5,6 +5,7 @@ import { AppError } from "../utils/app-error";
 import { clinicVerificationSummary, updateClinicDetails } from "./clinic-verification.service";
 import { updateClinicProfileSchema } from "../validation/profile.schemas";
 import { z } from "zod";
+import { invalidateSitterVerification } from "./sitter-verification.service";
 import { assertPhotoExists, getPetPhotoUrl } from "./storage.service";
 
 function requireRole(actual: AccountRole, expected: AccountRole) {
@@ -39,7 +40,12 @@ export async function updateUserProfile(
   const profile = await prisma.userProfile.findUnique({ where: { accountId } });
   if (!profile) throw new AppError(404, "User profile was not found", "PROFILE_NOT_FOUND");
   if (input.photoKey) await assertPhotoExists(accountId, input.photoKey, "users");
-  await prisma.userProfile.update({
+  await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "Account" WHERE id = ${accountId} FOR UPDATE`;
+    const current = await tx.userProfile.findUniqueOrThrow({ where: { accountId } });
+    if (input.fullName !== undefined && input.fullName !== current.fullName)
+      await invalidateSitterVerification(tx, accountId, "Zmiana imienia i nazwiska wymaga ponownej weryfikacji tożsamości.");
+    await tx.userProfile.update({
     where: { accountId },
     data: {
       fullName: input.fullName,
@@ -47,6 +53,7 @@ export async function updateUserProfile(
       photoKey: input.photoKey,
       birthDate: input.birthDate === null ? null : input.birthDate ? new Date(`${input.birthDate}T00:00:00.000Z`) : undefined
     }
+    });
   });
   return getUserProfile(accountId, role);
 }

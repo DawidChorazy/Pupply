@@ -1,3 +1,4 @@
+import { completePetFixture } from "../test-fixtures";
 import { randomUUID } from "node:crypto";
 import request from "supertest";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -13,11 +14,11 @@ async function fixture() {
     return { id: account.id, auth: `Bearer ${signAccessToken(account.id, "USER")}` };
   };
   const sitter = await user(), owner = await user();
-  const profile = await prisma.sitterProfile.create({ data: {
+  const profile = await prisma.sitterProfile.create({ data: { verificationStatus: "VERIFIED",
     accountId: sitter.id, bio: "Opieka testowa nad zwierzętami", city: "Warszawa", latitude: 52.23, longitude: 21.01,
     services: { create: { type: "DOG_WALK", durationMinutes: 30, priceCents: 3000 } }
   }, include: { services: true } });
-  const pet = await prisma.pet.create({ data: { accountId: owner.id, name: "Figa", gender: "FEMALE" } });
+  const pet = await prisma.pet.create({ data: { ...completePetFixture(), accountId: owner.id, name: "Figa", gender: "FEMALE" } });
   const start = Date.now() + 48 * 3_600_000;
   const interval = (from: number, to: number) => ({ startsAt: new Date(start + from * 60_000).toISOString(), endsAt: new Date(start + to * 60_000).toISOString() });
   const batch = (slots: object[]) => request(app).post("/api/sitters/me/availability/batch").set("Authorization", sitter.auth).send({ slots });
@@ -67,7 +68,7 @@ describe("calendar schedule", () => {
     const f = await fixture();
     const slots = (await f.batch([f.interval(0, 180), f.interval(240, 300)])).body.slots;
     expect((await request(app).post("/api/bookings").set("Authorization", f.owner.auth).send({
-      petId: f.pet.id, sitterServiceId: f.profile.services[0].id, availabilitySlotId: slots[0].id, startsAt: f.interval(30, 60).startsAt
+      petId: f.pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: f.profile.services[0].id, availabilitySlotId: slots[0].id, startsAt: f.interval(30, 60).startsAt
     })).status).toBe(201);
     const result = await request(app).post("/api/sitters/me/availability/archive").set("Authorization", f.sitter.auth).send({ slotIds: slots.map((slot: { id: string }) => slot.id) });
     expect(result.status).toBe(409); expect(result.body.error).toBe("SLOT_HAS_BOOKINGS");
@@ -90,9 +91,12 @@ describe("calendar schedule", () => {
     const slots = (await f.batch([f.interval(0, 180), f.interval(240, 300)])).body.slots;
     const [removed, booked] = await Promise.all([
       request(app).post("/api/sitters/me/availability/archive").set("Authorization", f.sitter.auth).send({ slotIds: slots.map((slot: { id: string }) => slot.id) }),
-      request(app).post("/api/bookings").set("Authorization", f.owner.auth).send({ petId: f.pet.id, sitterServiceId: f.profile.services[0].id, availabilitySlotId: slots[0].id, startsAt: f.interval(30, 60).startsAt })
+      request(app).post("/api/bookings").set("Authorization", f.owner.auth).send({ petId: f.pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: f.profile.services[0].id, availabilitySlotId: slots[0].id, startsAt: f.interval(30, 60).startsAt })
     ]);
-    expect([200, 409]).toContain(removed.status); expect([201, 409]).toContain(booked.status);
+    expect([200, 409]).toContain(removed.status); expect([201, 404, 409]).toContain(booked.status);
+    // The archive may commit before the booking's transaction even reads the
+    // slot. Archived slots intentionally return 404 (also tested in booking reliability).
+    if (booked.status === 404) { expect(removed.status).toBe(200); expect(booked.body.error).toBe("AVAILABILITY_NOT_FOUND"); }
     expect(removed.status === 200 && booked.status === 201).toBe(false);
     expect(await prisma.availabilitySlot.count({ where: { sitterProfileId: f.profile.id, archivedAt: null } })).toBe(removed.status === 200 ? 0 : 2);
   });
@@ -109,7 +113,7 @@ describe("calendar schedule", () => {
       .query({ from: interval(0, 1).startsAt, to: interval(28 * 1440, 28 * 1440 + 1).startsAt, limit: 200 });
     expect(mine.body.slots).toHaveLength(168);
     const reserve = (from: number) => request(app).post("/api/bookings").set("Authorization", owner.auth).send({
-      petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: response.body.slots[0].id, startsAt: interval(from, from + 30).startsAt
+      petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId: response.body.slots[0].id, startsAt: interval(from, from + 30).startsAt
     });
     expect((await reserve(45)).status).toBe(409);
     expect((await reserve(60)).status).toBe(409);
@@ -149,7 +153,7 @@ describe("calendar schedule", () => {
     const { batch, interval, owner, pet, profile, publicUrl } = await fixture();
     const slot = (await batch([interval(0, 180)])).body.slots[0];
     const booking = await request(app).post("/api/bookings").set("Authorization", owner.auth).send({
-      petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, startsAt: interval(60, 90).startsAt
+      petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, startsAt: interval(60, 90).startsAt
     });
     expect(booking.status).toBe(201);
     const response = await request(app).get(publicUrl);
@@ -167,7 +171,7 @@ describe("calendar schedule", () => {
     expect((await edit(interval(0, 270))).status).toBe(409);
     expect((await edit(interval(0, 210), owner.auth)).status).toBe(404);
     expect((await edit(interval(0, 210))).status).toBe(200);
-    expect((await request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, startsAt: interval(60, 90).startsAt })).status).toBe(201);
+    expect((await request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, startsAt: interval(60, 90).startsAt })).status).toBe(201);
     expect((await edit(interval(0, 45))).status).toBe(409);
     expect((await edit(interval(1440, 1620))).status).toBe(409);
     expect((await edit(interval(0, 180))).status).toBe(200);
@@ -182,7 +186,7 @@ describe("calendar schedule", () => {
     const slot = (await batch([interval(0, 180)])).body.slots[0];
     const [edit, booking] = await Promise.all([
       request(app).patch(`/api/sitters/me/availability/${slot.id}`).set("Authorization", sitter.auth).send(interval(0, 60)),
-      request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, startsAt: interval(120, 150).startsAt })
+      request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, startsAt: interval(120, 150).startsAt })
     ]);
     expect([200, 409]).toContain(edit.status); expect([201, 409]).toContain(booking.status);
     expect(edit.status === 200 && booking.status === 201).toBe(false);
@@ -208,7 +212,7 @@ describe("calendar schedule", () => {
     const { batch, interval, owner, pet, profile } = await fixture();
     const slot = (await batch([interval(0, 180)])).body.slots[0];
     const response = await request(app).post("/api/bookings").set("Authorization", owner.auth).send({
-      petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id,
+      petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id,
       startsAt: interval(30, 120).startsAt, durationMinutes: 90, expectedPriceCents: 9000, priceCents: 1
     });
     expect(response.status).toBe(201);
@@ -222,7 +226,7 @@ describe("calendar schedule", () => {
   it("rejects shorter/invalid durations, unavailable extended ranges and stale quoted prices without creating bookings", async () => {
     const { batch, interval, owner, pet, profile } = await fixture();
     const slot = (await batch([interval(0, 180)])).body.slots[0];
-    const create = (fields: object) => request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, ...fields });
+    const create = (fields: object) => request(app).post("/api/bookings").set("Authorization", owner.auth).send({ petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, availabilitySlotId: slot.id, ...fields });
     for (const durationMinutes of [-1, 0, 15, 30.5, 1441]) expect((await create({ durationMinutes })).status).toBe(400);
     expect((await create({ durationMinutes: 60, expectedPriceCents: 3000 })).body.error).toBe("PRICE_CHANGED");
     expect((await create({ durationMinutes: 90, startsAt: interval(120, 210).startsAt })).status).toBe(409);
@@ -233,7 +237,7 @@ describe("calendar schedule", () => {
     const { batch, interval, owner, pet, profile } = await fixture();
     const slots = (await batch([interval(0, 180), interval(1440, 1620), interval(2880, 3060)])).body.slots;
     const response = await request(app).post("/api/bookings/batch").set("Authorization", owner.auth).send({
-      petId: pet.id, sitterServiceId: profile.services[0].id, durationMinutes: 60, expectedPriceCents: 6000,
+      petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, durationMinutes: 60, expectedPriceCents: 6000,
       slots: slots.map((slot: { id: string; startsAt: string }) => ({ availabilitySlotId: slot.id, startsAt: slot.startsAt }))
     });
     expect(response.status).toBe(201); expect(response.body.bookings).toHaveLength(3); expect(response.body.totalPriceCents).toBe(18000);
@@ -245,7 +249,7 @@ describe("calendar schedule", () => {
   it("rolls back all days and notifications when any date is occupied", async () => {
     const { batch, interval, owner, sitter, pet, profile } = await fixture();
     const [first, second] = (await batch([interval(0, 180), interval(1440, 1620)])).body.slots;
-    const shared = { petId: pet.id, sitterServiceId: profile.services[0].id, durationMinutes: 60 };
+    const shared = { petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, durationMinutes: 60 };
     expect((await request(app).post("/api/bookings").set("Authorization", owner.auth).send({ ...shared, availabilitySlotId: second.id, startsAt: second.startsAt })).status).toBe(201);
     const response = await request(app).post("/api/bookings/batch").set("Authorization", owner.auth).send({ ...shared, slots: [first, second].map(slot => ({ availabilitySlotId: slot.id, startsAt: slot.startsAt })) });
     expect(response.status).toBe(409);
@@ -257,7 +261,7 @@ describe("calendar schedule", () => {
   it("accepts only one of two simultaneous multi-day reservations and validates batch size", async () => {
     const { batch, interval, owner, pet, profile } = await fixture();
     const slots = (await batch([interval(0, 180), interval(1440, 1620)])).body.slots;
-    const payload = { petId: pet.id, sitterServiceId: profile.services[0].id, durationMinutes: 60, slots: slots.map((slot: { id: string; startsAt: string }) => ({ availabilitySlotId: slot.id, startsAt: slot.startsAt })) };
+    const payload = { petId: pet.id, pickupAddress: "Warszawa, Testowa 1", sitterServiceId: profile.services[0].id, durationMinutes: 60, slots: slots.map((slot: { id: string; startsAt: string }) => ({ availabilitySlotId: slot.id, startsAt: slot.startsAt })) };
     const create = (input = payload) => request(app).post("/api/bookings/batch").set("Authorization", owner.auth).send(input);
     expect((await create({ ...payload, slots: [] })).status).toBe(400);
     expect((await create({ ...payload, slots: Array.from({ length: 29 }, () => payload.slots[0]) })).status).toBe(400);
