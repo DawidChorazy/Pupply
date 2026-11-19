@@ -209,6 +209,8 @@ potrzebuje dostępu do GitHuba i modułów Go; kolejne korzystają z cache.
 
 ## Odbiór lokalnego MVP backendu
 
+Wyniki testów API i zapisu GPS na Androidzie 16 zebrano w [protokole odbioru backendu](docs/release.md).
+
 Po instalacji zależności poleceniem `npm --prefix backend ci` uruchom
 `npm run test:backend`. Zestaw testowy sam przygotuje tymczasowy PostgreSQL
 i MinIO w Dockerze lub Podmanie, zastosuje migracje i przejdzie scenariusz API.
