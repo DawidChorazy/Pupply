@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const { spawn, spawnSync } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
 const backend = path.join(root, "backend");
+const smoke = process.argv.length === 3 && process.argv[2] === "--smoke";
 const suffix = crypto.randomBytes(5).toString("hex"), password = crypto.randomBytes(24).toString("hex");
 const containers = [], names = { db: `petify-test-db-${suffix}`, storage: `petify-test-storage-${suffix}` };
 const engine = process.env.CONTAINER_ENGINE || ["docker", "podman"].find(bin => spawnSync(bin, ["info"], { stdio: "ignore", timeout: 10_000 }).status === 0);
@@ -55,7 +56,19 @@ for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => { interrupt
     await run("npm", ["run", "prisma:generate"], env);
     await run(path.join(backend, "node_modules/.bin/prisma"), ["migrate", "deploy"], env);
     if (interrupted) throw new Error("Przerwano testy.");
-    await run("npm", ["test", "--", ...process.argv.slice(2)], env);
+    if (smoke) {
+      const mail = `petify-test-mail-${suffix}`;
+      capture(["run", "-d", "--rm", "--name", mail, "-p", "127.0.0.1::1025", "-p", "127.0.0.1::8025", "docker.io/axllent/mailpit:v1.31.4"]);
+      containers.push(mail);
+      await run("npm", ["run", "build"], env);
+      await run(process.execPath, [path.join(backend, "smoke/marketplace.cjs")], {
+        ...env, SMTP_HOST: "127.0.0.1", SMTP_PORT: String(port(mail, "1025")), SMTP_SECURE: "false",
+        SMTP_USER: "", SMTP_PASSWORD: "", MAILPIT_URL: `http://127.0.0.1:${port(mail, "8025")}`,
+        APP_PUBLIC_URL: "http://127.0.0.1:8081"
+      });
+    } else {
+      await run("npm", ["test", "--", ...process.argv.slice(2)], env);
+    }
   } finally {
     for (const name of containers.reverse()) spawnSync(engine, ["stop", "-t", "2", name], { stdio: "ignore" });
   }

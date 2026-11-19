@@ -213,6 +213,12 @@ Po instalacji zależności poleceniem `npm --prefix backend ci` uruchom
 `npm run test:backend`. Zestaw testowy sam przygotuje tymczasowy PostgreSQL
 i MinIO w Dockerze lub Podmanie, zastosuje migracje i przejdzie scenariusz API.
 
+Pełny spacer za 0 zł na działającym API sprawdza `npm run test:backend -- --smoke`.
+Ten test uruchamia też lokalny Mailpit i korzysta z linków przesłanych przez SMTP.
+Zakłada konta, przeprowadza weryfikację opiekuna, przesyła pliki do MinIO,
+rezerwuje i kończy spacer z testowymi punktami GPS, a na koniec resetuje hasło.
+Kontenery testowe są usuwane po zakończeniu.
+
 Do demonstracji ze standardową konfiguracją `PAYU_ENABLED=false` użyj oferty
 spaceru za 0 zł i terminu za 10 minut. Właściciel rezerwuje spacer, a zweryfikowany
 opiekun go akceptuje. W szczegółach zaakceptowanej rezerwacji oboje mogą
